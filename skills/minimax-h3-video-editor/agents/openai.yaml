@@ -1,0 +1,4 @@
+interface:
+  display_name: "MiniMax H3 Video Editor"
+  short_description: "Design precise H3 video edit prompts"
+  default_prompt: "Use $minimax-h3-video-editor to turn my requested changes into a precise H3 video-edit prompt."

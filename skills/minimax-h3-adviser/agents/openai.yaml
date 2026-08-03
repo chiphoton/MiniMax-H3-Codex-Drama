@@ -1,0 +1,4 @@
+interface:
+  display_name: "MiniMax H3 Adviser"
+  short_description: "Choose and shape the right H3 workflow"
+  default_prompt: "Use $minimax-h3-adviser to recommend a workflow and turn my idea into a MiniMax H3 prompt."

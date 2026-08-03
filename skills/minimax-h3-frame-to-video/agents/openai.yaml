@@ -1,0 +1,4 @@
+interface:
+  display_name: "MiniMax H3 Frame to Video"
+  short_description: "Animate first and last frames with H3"
+  default_prompt: "Use $minimax-h3-frame-to-video to design motion between my supplied H3 keyframes."

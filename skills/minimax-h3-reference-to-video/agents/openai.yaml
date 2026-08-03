@@ -1,0 +1,4 @@
+interface:
+  display_name: "MiniMax H3 Reference to Video"
+  short_description: "Direct H3 multimodal reference workflows"
+  default_prompt: "Use $minimax-h3-reference-to-video to assign my media references and produce a copy-ready H3 prompt."

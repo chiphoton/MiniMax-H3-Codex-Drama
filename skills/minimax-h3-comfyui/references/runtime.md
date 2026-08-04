@@ -78,13 +78,27 @@ Call `enqueue_workflow` exactly once and retain its `prompt_id`.
 
 For `[return=false]`, stop after successful submission and return the `prompt_id`. Do not wait, poll, fetch, or infer future success. If the user later asks about that ID, use `get_history`; on failure use `diagnose_run` and then `get_logs` only if needed.
 
-For the default `[return=true]`, monitor the exact ID using queue status and `get_history`. The wait ceiling is the configured value, capped at 60 minutes. Keep the user updated during long runs and do not perform a single blocking wait longer than 60 seconds. On timeout, leave the job running and return the `prompt_id`.
+For the default `[return=true]`, monitor the exact ID using execution events, queue status, and `get_history`. The wait ceiling is the configured value, capped at 60 minutes. Keep the user updated during long runs and do not perform a single blocking wait longer than 60 seconds. On timeout, leave the job running and return the `prompt_id`.
+
+Prefer ComfyUI's live terminal-log stream over repeated fixed-interval queue polls. The web UI's **LOGS** panel displays the same stream. Use an available MCP log subscription or raw-log operation first. On a standalone ComfyUI server when no matching tool exists, the frontend reads the backlog from `GET /internal/logs/raw`, enables live delivery with `PATCH /internal/logs/subscribe` using `{ "enabled": true, "clientId": "<client-id>" }`, and receives `logs` events on `/ws?clientId=<client-id>`. Do not hard-code these standalone routes for cloud deployments.
+
+Parse the most recent tqdm sampler line after initialization. A representative line is:
+
+```text
+35%|█████████████████████████████| 7/20 [23:19<43:17, 199.80s/it]
+```
+
+Treat the value after `<` as the sampler ETA and the `7/20` pair as current sampler progress. At `0%` with `Model Initializing`, no reliable ETA exists yet. Prefer a persistent log subscription so progress and failure events wake the monitor without polling. If only log snapshots are available, wait adaptively from the parsed ETA, capped at 55 seconds per wait, then read one fresh progress slice. Fall back to queue status and `get_history` when logs are unavailable or no ETA is parseable.
+
+Raw terminal lines do not necessarily include a `prompt_id`. Use their ETA only when queue or execution state confirms that the retained ID is the active sampler job and the association is unambiguous. With parallel active jobs, ignore unscoped log ETAs and use per-prompt progress and history events instead.
+
+The tqdm ETA covers the sampler phase, not video/audio VAE decoding or file saving. When the sampler reaches `100%` or `<00:00`, continue waiting for `execution_success` and confirm the exact history entry or fresh output before reporting completion.
 
 On a failed or rejected run:
 
 1. Call `diagnose_run` with the exact `prompt_id` when one exists.
 2. Check `get_history` for the recorded traceback and node.
-3. Use `get_logs` only for missing context.
+3. Use diagnostic log context beyond the already-read sampler progress slice only when needed.
 4. Correct a deterministic filename or graph patch only when the intended choice is unambiguous; otherwise ask.
 
 Never enqueue a second attempt silently.

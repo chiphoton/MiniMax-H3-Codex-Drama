@@ -43,7 +43,7 @@ Read [references/runtime.md](references/runtime.md) before using ComfyUI. Follow
 3. Resolve installed models conservatively; never download a model without explicit permission.
 4. Run `scripts/prepare_workflow.py` to patch only the manifest-declared fields.
 5. Validate the prepared API graph before submission.
-6. Submit once. Respect the return behavior above.
+6. Submit once. Respect the return behavior above. For awaited runs, prefer the live sampler ETA from ComfyUI's log stream to fixed-interval polling, while binding completion and errors to the exact `prompt_id`.
 7. On completion, fetch the output video to a temporary or user-selected directory and return it with the `prompt_id`.
 
 Do not submit a workflow while required media, a compatible model choice, or validation errors remain unresolved.

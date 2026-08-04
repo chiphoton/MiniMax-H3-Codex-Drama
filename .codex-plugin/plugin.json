@@ -1,0 +1,39 @@
+{
+  "name": "minimax-h3-prompt-skills",
+  "version": "0.1.0",
+  "description": "Design MiniMax H3 prompts and run pinned official T2V, I2V, and R2V workflows through local ComfyUI.",
+  "author": {
+    "name": "chiphoton",
+    "url": "https://github.com/chiphoton"
+  },
+  "homepage": "https://github.com/chiphoton/MiniMax-H3-Prompt-Skills",
+  "repository": "https://github.com/chiphoton/MiniMax-H3-Prompt-Skills",
+  "keywords": [
+    "minimax-h3",
+    "comfyui",
+    "video-generation",
+    "prompt-engineering"
+  ],
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "MiniMax H3 Prompt Skills",
+    "shortDescription": "Direct and run MiniMax H3 videos with ComfyUI",
+    "longDescription": "Choose the right MiniMax H3 workflow, build or improve its prompt, then prepare, validate, run, preview, and retrieve official ComfyUI T2V, I2V, and R2V workflows.",
+    "developerName": "chiphoton",
+    "category": "Creativity",
+    "capabilities": [
+      "Interactive",
+      "Read",
+      "Write"
+    ],
+    "websiteURL": "https://github.com/chiphoton/MiniMax-H3-Prompt-Skills",
+    "defaultPrompt": [
+      "Create and run a MiniMax H3 video in ComfyUI",
+      "Animate these frames with MiniMax H3",
+      "Use these references to generate an H3 video"
+    ],
+    "brandColor": "#7C3AED",
+    "screenshots": []
+  }
+}

@@ -1,0 +1,4 @@
+interface:
+  display_name: "MiniMax H3 ComfyUI"
+  short_description: "Run MiniMax H3 through local ComfyUI"
+  default_prompt: "Use $minimax-h3-comfyui to run my finished MiniMax H3 prompt and return the generated video."

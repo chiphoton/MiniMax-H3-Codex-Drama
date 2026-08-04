@@ -4,15 +4,17 @@ Checked against fal.ai on 2026-08-04. Treat provider settings as changeable fact
 
 ## Route by the role of the input
 
-| User situation | Workflow | fal endpoint | Specialist |
-|---|---|---|---|
-| No media; H3 invents the whole clip | Text to video | `minimax/h3/text-to-video` | `minimax-h3-text-to-video` |
-| One image is the literal first frame | First-frame animation | `minimax/h3/image-to-video` | `minimax-h3-frame-to-video` |
-| Two images are literal first and last frames | First/last-frame transition | `minimax/h3/image-to-video` | `minimax-h3-frame-to-video` |
-| Media supplies identity, design, style, motion, camera, rhythm, music, or voice | Reference to video | `minimax/h3/reference-to-video` | `minimax-h3-reference-to-video` |
-| An existing video must change while unlisted content remains stable | Precise video edit | `minimax/h3/reference-to-video` | `minimax-h3-video-editor` |
+| User situation | Workflow | fal endpoint | ComfyUI template | Specialist |
+|---|---|---|---|---|
+| No media; H3 invents the whole clip | Text to video | `minimax/h3/text-to-video` | T2V | `minimax-h3-text-to-video` |
+| One image is the literal first frame | First-frame animation | `minimax/h3/image-to-video` | I2V | `minimax-h3-frame-to-video` |
+| Two images are literal first and last frames | First/last-frame transition | `minimax/h3/image-to-video` | I2V | `minimax-h3-frame-to-video` |
+| Media supplies identity, design, style, motion, camera, rhythm, music, or voice | Reference to video | `minimax/h3/reference-to-video` | R2V | `minimax-h3-reference-to-video` |
+| An existing video must change while unlisted content remains stable | Precise video edit | `minimax/h3/reference-to-video` | R2V reference-conditioned regeneration | `minimax-h3-video-editor` |
 
 The asset's job decides the route. A portrait used as the literal opening composition is a first frame. The same portrait used only to preserve identity is a reference image.
+
+The ComfyUI column is used only on explicit execution intent. The bundled official templates are T2V, I2V, and R2V; they do not provide a distinct surgical video-edit graph. A video-editor prompt therefore runs as R2V reference-conditioned regeneration and should not be described as pixel-stable source editing.
 
 ## Current fal.ai capability notes
 
@@ -56,4 +58,3 @@ Remove or rewrite lower-priority instructions that contradict higher-priority on
 - fal text-to-video schema: <https://fal.ai/models/minimax/h3/text-to-video/api>
 - fal image-to-video schema: <https://fal.ai/models/minimax/h3/image-to-video/api>
 - fal reference-to-video schema: <https://fal.ai/models/minimax/h3/reference-to-video/api>
-

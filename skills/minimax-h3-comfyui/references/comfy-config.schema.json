@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/chiphoton/MiniMax-H3-Prompt-Skills/comfy-config.schema.json",
+  "title": "MiniMax H3 ComfyUI configuration",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "connection": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "address": { "type": "string", "default": "localhost:8188" }
+      }
+    },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "return": { "type": "boolean", "default": true },
+        "preview": { "type": "boolean", "default": true },
+        "load_workflow": { "type": "boolean", "default": false },
+        "wait_timeout_minutes": { "type": "number", "exclusiveMinimum": 0, "maximum": 60, "default": 60 }
+      }
+    },
+    "models": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "fl2va": { "type": "string" },
+        "ref2va": { "type": "string" },
+        "text_encoder": { "type": "string" },
+        "video_vae": { "type": "string" },
+        "audio_vae": { "type": "string" }
+      }
+    },
+    "generation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "width": { "type": ["integer", "null"], "minimum": 32, "multipleOf": 32 },
+        "height": { "type": ["integer", "null"], "minimum": 32, "multipleOf": 32 },
+        "duration_seconds": { "type": ["number", "null"], "exclusiveMinimum": 0 },
+        "seed": { "type": ["integer", "null"], "minimum": 0 },
+        "filename_prefix": { "type": "string" },
+        "sampler": { "type": "string" },
+        "scheduler": { "type": "string" },
+        "steps": { "type": ["integer", "null"], "minimum": 1 },
+        "denoise": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+        "ref_image_size": { "enum": ["", "match", "max"] }
+      }
+    }
+  }
+}

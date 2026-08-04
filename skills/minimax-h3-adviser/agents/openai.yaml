@@ -1,4 +1,4 @@
 interface:
   display_name: "MiniMax H3 Adviser"
-  short_description: "Choose and shape the right H3 workflow"
-  default_prompt: "Use $minimax-h3-adviser to recommend a workflow and turn my idea into a MiniMax H3 prompt."
+  short_description: "Choose, shape, and optionally run the right H3 workflow"
+  default_prompt: "Use $minimax-h3-adviser to recommend a MiniMax H3 workflow, finish my prompt, and run it only if I explicitly ask for ComfyUI execution."

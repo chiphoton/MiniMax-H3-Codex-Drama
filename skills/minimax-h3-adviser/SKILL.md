@@ -1,11 +1,11 @@
 ---
 name: minimax-h3-adviser
-description: Advise, enhance, diagnose, and route MiniMax H3 video prompts across text-to-video, first/last-frame, multimodal reference-to-video, and precise video-editing workflows. Use when a user has a video idea, draft prompt, failed generation, uncertain input strategy, or asks which MiniMax H3 workflow or template to use. Grill one decision at a time unless the user requests fast mode, then continue through the selected specialist and return a copy-ready prompt.
+description: Advise, enhance, diagnose, and route MiniMax H3 video prompts across text-to-video, first/last-frame, multimodal reference-to-video, precise video-editing, and optional ComfyUI execution. Use when a user has a video idea, draft prompt, failed generation, uncertain input strategy, asks which MiniMax H3 workflow to use, or explicitly asks to run it through ComfyUI. Grill one decision at a time unless the user requests fast mode, continue through one prompt specialist, and invoke ComfyUI only on explicit execution intent.
 ---
 
 # MiniMax H3 Adviser
 
-Turn an idea, draft, failure report, or asset set into the right MiniMax H3 workflow and a finished prompt. Stay prompt-only: never submit a generation job.
+Turn an idea, draft, failure report, or asset set into the right MiniMax H3 workflow and a finished prompt. Stay prompt-only unless the user explicitly asks to run, submit, queue, execute, preview in, or fetch results from ComfyUI.
 
 ## Start by classifying the request
 
@@ -66,6 +66,14 @@ Treat a source video edit as video editing even though fal serves it through the
 
 After routing, continue through the specialist automatically. Do not stop at “use this skill.”
 
+## Hand explicit execution to ComfyUI
+
+After the selected specialist has produced the finished prompt, load and apply `../minimax-h3-comfyui/SKILL.md` only when the user explicitly asks to generate a video, run, submit, queue, execute, preview a ComfyUI workflow, fetch its output, or supplies a ComfyUI control flag such as `[return=true]`.
+
+Do not treat “generate a prompt,” “write a prompt,” or “recommend a workflow” as execution intent. Do not invoke ComfyUI merely because it is installed or reachable.
+
+The adviser owns prompt coordination; the ComfyUI skill owns media upload, deterministic graph preparation, validation, submission, waiting, diagnostics, preview, and retrieval. Preserve the specialist's final prompt when handing it off. If the request already includes `[prompt_enhance=true]` or `[pe=1]`, do not enhance it a second time.
+
 ## Offer language candidates when useful
 
 Read [references/prompt-language.md](references/prompt-language.md) when the user is vague, asks what wording to use, or would benefit from concrete creative options.
@@ -78,7 +86,7 @@ Read [references/prompt-language.md](references/prompt-language.md) when the use
 
 ## Return a compact handoff
 
-After applying the specialist, return:
+For prompt-only requests, after applying the specialist return:
 
 1. **Recommendation**: selected workflow and one-sentence reason.
 2. **Assumptions**: only material assumptions, especially in fast mode.
@@ -89,6 +97,8 @@ After applying the specialist, return:
 
 Do not include code, API calls, prices, or job-submission instructions unless the user explicitly asks for implementation details in a later request.
 
+For execution requests, return the ComfyUI skill's execution report instead of duplicating the full prompt handoff. Include the selected workflow and any material assumptions that affected execution.
+
 ## Keep the enhancement honest
 
 - Preserve a detailed user's creative choices; normalize instead of rewriting their concept.
@@ -98,4 +108,3 @@ Do not include code, API calls, prices, or job-submission instructions unless th
 - Describe audio as deliberately as picture when sound matters.
 - Use specific negative direction tied to likely failure modes; avoid generic quality-word piles.
 - Pair every requested edit with what must remain unchanged.
-

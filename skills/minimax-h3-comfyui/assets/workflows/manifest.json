@@ -1,0 +1,77 @@
+{
+  "source": {
+    "repository": "https://github.com/Comfy-Org/workflow_templates",
+    "commit": "ac26fb9893f97d7cfeb8122d2e5865f282e8f659",
+    "files": {
+      "t2v.ui.json": "31ab33fdb053a7834cc866bd7aa08b887518fc656e4a796c89779c6b5e1786e6",
+      "i2v.ui.json": "bb71aecdd3c0b62e56eafe03acb14d1cfeabec7072eaed9cbdf473c2aaf73009",
+      "r2v.ui.json": "099d24eda6263854818975c7209db6f29ebfd0339936c928f12293d5ab029ffb"
+    }
+  },
+  "modes": {
+    "t2v": {
+      "ui": "t2v.ui.json",
+      "api": "t2v.api.json",
+      "prompt": ["104", "prompt"],
+      "size": ["104", "width", "height"],
+      "length": ["104", "length"],
+      "seed": ["15", "noise_seed"],
+      "models": {
+        "fl2va": ["6", "unet_name"],
+        "text_encoder": ["13", "clip_name"],
+        "video_vae": ["11", "vae_name"],
+        "audio_vae": ["24", "vae_name"]
+      },
+      "output": ["92", "filename_prefix"],
+      "sampling": {
+        "sampler": ["17", "sampler_name"],
+        "scheduler": ["9", "scheduler"],
+        "steps": ["9", "steps"],
+        "denoise": ["9", "denoise"]
+      }
+    },
+    "i2v": {
+      "ui": "i2v.ui.json",
+      "api": "i2v.api.json",
+      "prompt": ["104", "prompt"],
+      "size": ["104", "width", "height"],
+      "length": ["104", "length"],
+      "seed": ["15", "noise_seed"],
+      "models": {
+        "fl2va": ["6", "unet_name"],
+        "text_encoder": ["13", "clip_name"],
+        "video_vae": ["11", "vae_name"],
+        "audio_vae": ["24", "vae_name"]
+      },
+      "output": ["92", "filename_prefix"],
+      "sampling": {
+        "sampler": ["17", "sampler_name"],
+        "scheduler": ["9", "scheduler"],
+        "steps": ["9", "steps"],
+        "denoise": ["9", "denoise"]
+      }
+    },
+    "r2v": {
+      "ui": "r2v.ui.json",
+      "api": "r2v.api.json",
+      "prompt": ["136", "prompt"],
+      "size": ["136", "width", "height"],
+      "length": ["136", "length"],
+      "seed": ["129", "noise_seed"],
+      "models": {
+        "ref2va": ["127", "unet_name"],
+        "text_encoder": ["128", "clip_name"],
+        "video_vae": ["119", "vae_name"],
+        "audio_vae": ["120", "vae_name"]
+      },
+      "output": ["92", "filename_prefix"],
+      "sampling": {
+        "sampler": ["123", "sampler_name"],
+        "scheduler": ["124", "scheduler"],
+        "steps": ["124", "steps"],
+        "denoise": ["124", "denoise"],
+        "ref_image_size": ["136", "ref_image_size"]
+      }
+    }
+  }
+}

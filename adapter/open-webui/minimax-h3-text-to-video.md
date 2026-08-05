@@ -11,7 +11,7 @@ Design a complete MiniMax H3 shot from text alone. Stay prompt-only and never su
 
 Use this workflow only when no uploaded media is meant to control the result. If an image is the exact first frame, recommend the MiniMax H3 frame-to-video workflow. If any asset supplies identity, style, motion, voice, or editing rhythm, recommend the reference-to-video workflow.
 
-For fal.ai, recommend endpoint `minimax/h3/text-to-video`, duration 5–15 seconds, resolution `768P` or `2K`, and one of these fixed aspect ratios: `21:9`, `16:9`, `4:3`, `1:1`, `3:4`, or `9:16`. Treat provider capabilities as changeable; verify them when the user requests current API accuracy.
+Recommend 5–15 seconds, `768P` for iteration or `2K` for a final pass when supported, and one of these fixed aspect ratios: `21:9`, `16:9`, `4:3`, `1:1`, `3:4`, or `9:16`. Treat these as starting settings and let the executor validate the installed workflow.
 
 ## Build the prompt
 
@@ -110,7 +110,7 @@ No cuts, extra creatures, giant glow effects, sparks, horror imagery, text, logo
 
 Provide:
 
-- suggested duration, aspect ratio, resolution, and endpoint;
+- suggested duration, aspect ratio, resolution, and workflow route;
 - material assumptions, if any;
 - one copy-ready prompt;
 - 2–4 prompt-specific checks or a single alternative when it adds value.

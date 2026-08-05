@@ -1,0 +1,4 @@
+interface:
+  display_name: "MiniMax-H3 Drama Producer"
+  short_description: "Produce complete videos with profiles and QC"
+  default_prompt: "Use $minimax-h3-drama-producer to turn my brief and references into a finished video."

@@ -59,13 +59,13 @@ For diagnosis, first obtain or inspect the original prompt and the observed fail
 
 The asset's job decides the route. A portrait used as the literal opening composition is a first frame. The same portrait used only to preserve identity is a reference image.
 
-| User situation | Workflow | fal.ai endpoint |
+| User situation | Workflow | Control model |
 |---|---|---|
-| No media; H3 invents the whole clip | Text to video | `minimax/h3/text-to-video` |
-| One image is the literal first frame | First-frame animation | `minimax/h3/image-to-video` |
-| Two images are literal first and last frames | First/last-frame transition | `minimax/h3/image-to-video` |
-| Media supplies identity, design, style, motion, camera, rhythm, music, or voice | Reference to video | `minimax/h3/reference-to-video` |
-| An existing video must change while unlisted content remains stable | Precise video edit | `minimax/h3/reference-to-video` |
+| No media; H3 invents the whole clip | Text to video | Language controls the complete shot |
+| One image is the literal first frame | First-frame animation | Exact opening frame controls composition |
+| Two images are literal first and last frames | First/last-frame transition | Exact opening and closing frames control the bridge |
+| Media supplies identity, design, style, motion, camera, rhythm, music, or voice | Reference to video | Bounded multimodal reference roles |
+| An existing video must change while unlisted content remains stable | Precise video edit | Reference-conditioned regeneration with preservation constraints |
 
 Routing examples:
 
@@ -76,21 +76,20 @@ Routing examples:
 - “Replace the sign in this source clip but keep everything else.” → Video editor.
 - “My character changed clothes halfway through the result.” → Diagnose first, then route based on how identity or wardrobe was supplied.
 
-## Apply current fal.ai capability notes carefully
-
-These facts were checked on 2026-08-04. Treat them as changeable and verify them when the user asks for current API accuracy.
+## Apply provider-neutral starting settings
 
 - Output duration: 5–15 seconds.
-- Resolution: `768P` or `2K`.
-- Native stereo audio is available in the fal.ai H3 workflows.
+- Resolution: `768P` for iteration or `2K` for a final pass when supported.
+- Direct native audio with picture, but verify the installed workflow before promising a stream layout.
 - Text-to-video fixed ratios: `21:9`, `16:9`, `4:3`, `1:1`, `3:4`, `9:16`.
 - Image-to-video follows the first-frame image's aspect ratio.
-- Reference-to-video accepts the fixed ratios plus `adaptive`.
-- Reference-to-video accepts up to 9 images, 3 videos, and 3 audio clips, with no more than 12 files total.
-- Reference video clips: 2–15 seconds each and no more than 15 seconds combined.
-- Reference audio clips: 2–15 seconds each and no more than 15 seconds combined.
+- Reference-to-video may use a fixed ratio or `adaptive` when the active workflow supports it.
+- As a conservative complexity budget, prefer up to 9 images, 3 videos, 3 audio clips, and no more than 12 files total.
+- Prefer reference video and audio clips of 2–15 seconds and no more than 15 seconds combined per modality.
 - Audio cannot be the only reference type; include at least one image or video.
-- fal.ai reports a prompt capacity up to 7,000 characters. Prefer clarity over filling the limit.
+- Prefer clarity over filling a large prompt capacity.
+
+Treat these values as production heuristics and let the executor validate the installed workflow.
 
 When instructions compete, prioritize:
 
@@ -327,7 +326,7 @@ After applying the selected playbook, return:
 1. **Recommendation**: selected workflow and one-sentence reason.
 2. **Assumptions**: only material assumptions, especially in fast mode.
 3. **Inputs**: asset-to-role mapping when media is involved.
-4. **Suggested settings**: endpoint, duration, resolution, and aspect-ratio guidance.
+4. **Suggested settings**: workflow route, duration, resolution, and aspect-ratio guidance.
 5. **Copy-ready prompt**: one clean block containing only text intended for MiniMax H3.
 6. **Check**: 2–4 prompt-specific risks or iteration notes.
 

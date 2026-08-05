@@ -11,7 +11,7 @@ Direct motion from an exact first frame, optionally landing on an exact last fra
 
 Use this skill when the image is the actual first frame, not merely a style or identity reference. With two images, require the first to be the opening frame and the second to be the closing frame. Otherwise route to `../minimax-h3-reference-to-video/SKILL.md`.
 
-For current fal.ai settings, recommend endpoint `minimax/h3/image-to-video`, duration 5–15 seconds, resolution `768P` or `2K`, and note that output aspect ratio follows the first-frame image.
+Recommend a 5–15 second clip, `768P` for iteration or `2K` for a final pass when the active workflow and hardware support it, and note that output aspect ratio should follow the first-frame image.
 
 ## Build the motion bridge
 
@@ -46,10 +46,9 @@ Read [references/template-and-examples.md](references/template-and-examples.md) 
 
 Provide:
 
-- input-frame roles and suggested duration, resolution, and endpoint;
+- input-frame roles and suggested duration, resolution, and workflow route;
 - material assumptions, if any;
 - one copy-ready prompt;
 - 2–4 continuity checks.
 
 Do not return an API payload or submit a job.
-

@@ -9,9 +9,9 @@ Describe localized changes to a source video while locking every unaffected prop
 
 ## Confirm this workflow
 
-Use this skill when at least one existing video is the source to modify. Use the fal endpoint `minimax/h3/reference-to-video`; label the source as `Video 1` unless the user's existing ordering differs. Additional images, videos, or audio may supply replacement identity, design, environment, motion, or voice.
+Use this skill when at least one existing video is the source to modify. Route execution through reference-conditioned video generation; label the source as `Video 1` unless the user's existing ordering differs. Additional images, videos, or audio may supply replacement identity, design, environment, motion, or voice.
 
-For current fal.ai settings, recommend duration 5–15 seconds, resolution `768P` or `2K`, and a fixed or `adaptive` aspect ratio. Preserve the source duration or aspect when that is important to the edit.
+Recommend 5–15 seconds, `768P` for iteration or `2K` for a final pass when supported, and a fixed or `adaptive` aspect ratio. Preserve the source duration or aspect when that is important to the edit, and let the executor validate the installed workflow.
 
 ## Write change-and-preserve pairs
 
@@ -58,10 +58,9 @@ Read [references/template-and-examples.md](references/template-and-examples.md) 
 Provide:
 
 - an edit ledger and asset mapping;
-- suggested duration, aspect ratio, resolution, and endpoint;
+- suggested duration, aspect ratio, resolution, and workflow route;
 - material assumptions, if any;
 - one copy-ready prompt;
 - 2–4 preservation checks.
 
 Do not return an API payload or submit a job.
-

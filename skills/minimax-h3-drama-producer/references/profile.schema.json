@@ -1,0 +1,222 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://minimax-h3-drama.local/schemas/profile-1.0.json",
+  "title": "MiniMax-H3 Drama production profile",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "id",
+    "display_name",
+    "version",
+    "kind",
+    "inherits",
+    "summary",
+    "selection",
+    "format",
+    "story",
+    "assets",
+    "shots",
+    "image_generation",
+    "video_generation",
+    "audio",
+    "captions",
+    "editing",
+    "deliverables",
+    "qc"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "id": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$", "maxLength": 64},
+    "display_name": {"type": "string", "minLength": 1, "maxLength": 80},
+    "version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?$"},
+    "kind": {"enum": ["base", "primary", "custom"]},
+    "inherits": {"type": ["string", "null"], "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"},
+    "summary": {"type": "string", "minLength": 1, "maxLength": 500},
+    "selection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["viewer_outcomes", "platforms", "signals", "exclusions"],
+      "properties": {
+        "viewer_outcomes": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+        "platforms": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+        "signals": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+        "exclusions": {"type": "array", "items": {"type": "string"}, "uniqueItems": true}
+      }
+    },
+    "format": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["aspect_ratio", "width", "height", "fps", "resolution_label", "duration_s"],
+      "properties": {
+        "aspect_ratio": {"type": "string", "pattern": "^(source|adaptive|[0-9]+:[0-9]+)$"},
+        "width": {"type": ["integer", "null"], "minimum": 256, "maximum": 8192},
+        "height": {"type": ["integer", "null"], "minimum": 256, "maximum": 8192},
+        "fps": {"type": "number", "minimum": 1, "maximum": 120},
+        "resolution_label": {"type": "string", "minLength": 1, "maxLength": 40},
+        "duration_s": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["min", "target", "max"],
+          "properties": {
+            "min": {"type": "number", "minimum": 1, "maximum": 3600},
+            "target": {"type": "number", "minimum": 1, "maximum": 3600},
+            "max": {"type": "number", "minimum": 1, "maximum": 3600}
+          }
+        }
+      }
+    },
+    "story": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["authority", "expand_only_on_request", "required_beats", "pacing"],
+      "properties": {
+        "authority": {"enum": ["user", "profile"]},
+        "expand_only_on_request": {"type": "boolean"},
+        "required_beats": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "start_pct", "end_pct", "purpose"],
+            "properties": {
+              "id": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"},
+              "start_pct": {"type": "number", "minimum": 0, "maximum": 100},
+              "end_pct": {"type": "number", "minimum": 0, "maximum": 100},
+              "purpose": {"type": "string", "minLength": 1}
+            }
+          }
+        },
+        "pacing": {"type": "array", "items": {"type": "string"}, "uniqueItems": true}
+      }
+    },
+    "assets": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["required_roles", "recommended_roles", "recurring_entity_masters", "keyframe_policy"],
+      "properties": {
+        "required_roles": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+        "recommended_roles": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+        "recurring_entity_masters": {"type": "boolean"},
+        "keyframe_policy": {"enum": ["none", "key-shots", "all-shots"]}
+      }
+    },
+    "shots": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["default_duration_s", "key_shot_classes", "takes", "allowed_routes"],
+      "properties": {
+        "default_duration_s": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["min", "max"],
+          "properties": {
+            "min": {"type": "number", "minimum": 0.5, "maximum": 60},
+            "max": {"type": "number", "minimum": 0.5, "maximum": 60}
+          }
+        },
+        "key_shot_classes": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+        "takes": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["ordinary", "key", "max_valid_per_shot", "technical_retries"],
+          "properties": {
+            "ordinary": {"type": "integer", "minimum": 1, "maximum": 2},
+            "key": {"type": "integer", "minimum": 1, "maximum": 2},
+            "max_valid_per_shot": {"type": "integer", "minimum": 1, "maximum": 2},
+            "technical_retries": {"type": "integer", "minimum": 0, "maximum": 1}
+          }
+        },
+        "allowed_routes": {
+          "type": "array",
+          "items": {"enum": ["text-to-video", "frame-to-video", "first-last-frame", "reference-to-video", "video-edit"]},
+          "uniqueItems": true,
+          "minItems": 1
+        }
+      }
+    },
+    "image_generation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["create_missing_masters", "preserve_source_authority", "generation_order", "exact_text_in_post"],
+      "properties": {
+        "create_missing_masters": {"type": "boolean"},
+        "preserve_source_authority": {"type": "boolean"},
+        "generation_order": {"type": "array", "items": {"type": "string"}},
+        "exact_text_in_post": {"type": "boolean"}
+      }
+    },
+    "video_generation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["backend", "synchronous_default", "exact_prompt_preservation", "route_per_shot"],
+      "properties": {
+        "backend": {"const": "comfyui"},
+        "synchronous_default": {"type": "boolean"},
+        "exact_prompt_preservation": {"type": "boolean"},
+        "route_per_shot": {"type": "boolean"}
+      }
+    },
+    "audio": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["voice", "native_audio", "sfx", "music", "target_lufs", "true_peak_db"],
+      "properties": {
+        "voice": {"enum": ["auto", "on", "off"]},
+        "native_audio": {"enum": ["auto", "on", "off"]},
+        "sfx": {"enum": ["required", "recommended", "optional"]},
+        "music": {"enum": ["auto", "on", "off"]},
+        "target_lufs": {"type": "number", "minimum": -36, "maximum": -5},
+        "true_peak_db": {"type": "number", "minimum": -12, "maximum": 0}
+      }
+    },
+    "captions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "max_lines", "top_safe_pct", "bottom_safe_pct", "keyword_highlight"],
+      "properties": {
+        "mode": {"enum": ["auto", "on", "off"]},
+        "max_lines": {"type": "integer", "minimum": 1, "maximum": 4},
+        "top_safe_pct": {"type": "number", "minimum": 0, "maximum": 40},
+        "bottom_safe_pct": {"type": "number", "minimum": 0, "maximum": 40},
+        "keyword_highlight": {"type": "boolean"}
+      }
+    },
+    "editing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["backend", "rhythm", "allowed_transitions", "max_transition_s", "lock_output_duration", "cover_time_pct"],
+      "properties": {
+        "backend": {"const": "ffmpeg"},
+        "rhythm": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+        "allowed_transitions": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+        "max_transition_s": {"type": "number", "minimum": 0, "maximum": 3},
+        "lock_output_duration": {"type": "boolean"},
+        "cover_time_pct": {"type": ["number", "null"], "minimum": 0, "maximum": 100}
+      }
+    },
+    "deliverables": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["required", "optional"],
+      "properties": {
+        "required": {"type": "array", "items": {"type": "string"}, "uniqueItems": true, "minItems": 1},
+        "optional": {"type": "array", "items": {"type": "string"}, "uniqueItems": true}
+      }
+    },
+    "qc": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["duration_tolerance_s", "fps_tolerance", "black_interval_s", "freeze_interval_s", "hard_gates", "visual_checks", "soft_warnings"],
+      "properties": {
+        "duration_tolerance_s": {"type": "number", "minimum": 0, "maximum": 5},
+        "fps_tolerance": {"type": "number", "minimum": 0, "maximum": 5},
+        "black_interval_s": {"type": "number", "minimum": 0.05, "maximum": 10},
+        "freeze_interval_s": {"type": "number", "minimum": 0.1, "maximum": 30},
+        "hard_gates": {"type": "array", "items": {"type": "string"}, "uniqueItems": true, "minItems": 2},
+        "visual_checks": {"type": "array", "items": {"type": "string"}, "uniqueItems": true, "minItems": 1},
+        "soft_warnings": {"type": "array", "items": {"type": "string"}, "uniqueItems": true}
+      }
+    }
+  }
+}

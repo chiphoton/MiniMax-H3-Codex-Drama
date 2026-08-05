@@ -1,7 +1,7 @@
 {
-  "name": "minimax-h3-prompt-skills",
-  "version": "0.1.0",
-  "description": "Design MiniMax H3 prompts and run pinned official T2V, I2V, and R2V workflows through local ComfyUI.",
+  "name": "minimax-h3-drama",
+  "version": "0.2.0",
+  "description": "Produce profile-driven multi-shot videos in Codex with GPT-Image, MiniMax H3, local ComfyUI, deterministic post-production, and QC.",
   "author": {
     "name": "chiphoton",
     "url": "https://github.com/chiphoton"
@@ -12,14 +12,17 @@
     "minimax-h3",
     "comfyui",
     "video-generation",
-    "prompt-engineering"
+    "prompt-engineering",
+    "short-drama",
+    "advertising",
+    "codex"
   ],
   "skills": "./skills/",
   "mcpServers": "./.mcp.json",
   "interface": {
-    "displayName": "MiniMax H3 Prompt Skills",
-    "shortDescription": "Direct and run MiniMax H3 videos with ComfyUI",
-    "longDescription": "Choose the right MiniMax H3 workflow, build or improve its prompt, then prepare, validate, run, preview, and retrieve official ComfyUI T2V, I2V, and R2V workflows.",
+    "displayName": "MiniMax-H3 Drama",
+    "shortDescription": "Produce complete profile-driven MiniMax H3 videos",
+    "longDescription": "Plan complete multi-shot videos, create consistent visual assets with GPT-Image, generate each shot through local MiniMax H3 ComfyUI workflows, finish picture and sound, and enforce reproducible technical and visual QC. Distill reusable production profiles from reference videos or use the built-in TikTok short-drama and commercial-ad profiles.",
     "developerName": "chiphoton",
     "category": "Creativity",
     "capabilities": [
@@ -29,11 +32,13 @@
     ],
     "websiteURL": "https://github.com/chiphoton/MiniMax-H3-Prompt-Skills",
     "defaultPrompt": [
-      "Create and run a MiniMax H3 video in ComfyUI",
-      "Animate these frames with MiniMax H3",
-      "Use these references to generate an H3 video"
+      "Turn my story and references into a finished short video.",
+      "Create a product commercial and deliver the final master.",
+      "Distill these reference videos into a reusable profile."
     ],
     "brandColor": "#7C3AED",
+    "composerIcon": "./assets/icon.png",
+    "logo": "./assets/icon.png",
     "screenshots": []
   }
 }

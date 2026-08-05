@@ -55,14 +55,14 @@ For diagnosis, first obtain or inspect the original prompt and the observed fail
 
 ## Route to one specialist
 
-Use [references/workflow-map.md](references/workflow-map.md) for the complete routing table and current fal.ai capability notes.
+Use [references/workflow-map.md](references/workflow-map.md) for the complete routing table and provider-neutral starting settings.
 
 - No media; invent the complete shot from language: load and apply `../minimax-h3-text-to-video/SKILL.md`.
 - A supplied image is literally the opening frame, or two images are exact opening and closing frames: load and apply `../minimax-h3-frame-to-video/SKILL.md`.
 - Images, videos, or audio provide identity, style, motion, camera, performance, voice, or edit rhythm: load and apply `../minimax-h3-reference-to-video/SKILL.md`.
 - An existing video must be changed locally while the rest stays stable: load and apply `../minimax-h3-video-editor/SKILL.md`.
 
-Treat a source video edit as video editing even though fal serves it through the reference-to-video endpoint. Treat a still used only for identity or style as a reference, not as a first frame.
+Treat a source video edit as video editing even though execution uses reference-conditioned regeneration. Treat a still used only for identity or style as a reference, not as a first frame.
 
 After routing, continue through the specialist automatically. Do not stop at “use this skill.”
 
@@ -91,7 +91,7 @@ For prompt-only requests, after applying the specialist return:
 1. **Recommendation**: selected workflow and one-sentence reason.
 2. **Assumptions**: only material assumptions, especially in fast mode.
 3. **Inputs**: asset-to-role mapping when media is involved.
-4. **Suggested settings**: endpoint, duration, resolution, and aspect-ratio guidance.
+4. **Suggested settings**: workflow route, duration, resolution, and aspect-ratio guidance.
 5. **Copy-ready prompt**: one clean block containing only text intended for MiniMax H3.
 6. **Check**: 2–4 prompt-specific risks or iteration notes.
 

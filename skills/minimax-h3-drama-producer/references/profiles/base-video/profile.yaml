@@ -1,0 +1,93 @@
+{
+  "schema_version": "1.0",
+  "id": "base-video",
+  "display_name": "Base Video",
+  "version": "1.0.0",
+  "kind": "base",
+  "inherits": null,
+  "summary": "Common project, asset, generation, post-production, delivery, and QC defaults for profile-driven MiniMax-H3 videos.",
+  "selection": {
+    "viewer_outcomes": ["clear complete viewing experience"],
+    "platforms": ["local delivery"],
+    "signals": ["multi-shot video", "finished video"],
+    "exclusions": ["platform-specific storytelling grammar"]
+  },
+  "format": {
+    "aspect_ratio": "adaptive",
+    "width": 1920,
+    "height": 1080,
+    "fps": 24,
+    "resolution_label": "1080p master",
+    "duration_s": {"min": 5, "target": 30, "max": 120}
+  },
+  "story": {
+    "authority": "user",
+    "expand_only_on_request": true,
+    "required_beats": [
+      {"id": "opening", "start_pct": 0, "end_pct": 15, "purpose": "Establish the subject and viewing promise."},
+      {"id": "development", "start_pct": 15, "end_pct": 80, "purpose": "Develop the user-supplied story or message clearly."},
+      {"id": "resolution", "start_pct": 80, "end_pct": 100, "purpose": "Land a stable conclusion or requested call to action."}
+    ],
+    "pacing": ["Give every shot one controllable purpose.", "Hold the final state long enough to read."]
+  },
+  "assets": {
+    "required_roles": ["brief"],
+    "recommended_roles": ["identity", "environment", "style", "voice", "music"],
+    "recurring_entity_masters": true,
+    "keyframe_policy": "key-shots"
+  },
+  "shots": {
+    "default_duration_s": {"min": 2, "max": 8},
+    "key_shot_classes": ["opening", "hero", "reveal", "payoff", "cta"],
+    "takes": {"ordinary": 1, "key": 2, "max_valid_per_shot": 2, "technical_retries": 1},
+    "allowed_routes": ["text-to-video", "frame-to-video", "first-last-frame", "reference-to-video", "video-edit"]
+  },
+  "image_generation": {
+    "create_missing_masters": true,
+    "preserve_source_authority": true,
+    "generation_order": ["entity-masters", "scene-masters", "storyboard", "keyframes"],
+    "exact_text_in_post": true
+  },
+  "video_generation": {
+    "backend": "comfyui",
+    "synchronous_default": true,
+    "exact_prompt_preservation": true,
+    "route_per_shot": true
+  },
+  "audio": {
+    "voice": "auto",
+    "native_audio": "auto",
+    "sfx": "recommended",
+    "music": "auto",
+    "target_lufs": -14,
+    "true_peak_db": -1.5
+  },
+  "captions": {
+    "mode": "auto",
+    "max_lines": 2,
+    "top_safe_pct": 8,
+    "bottom_safe_pct": 12,
+    "keyword_highlight": false
+  },
+  "editing": {
+    "backend": "ffmpeg",
+    "rhythm": ["Cut on action or sound when it improves continuity.", "Use a stable final hold."],
+    "allowed_transitions": ["cut", "fade", "fadeblack", "fadewhite", "wipeleft", "wiperight"],
+    "max_transition_s": 0.5,
+    "lock_output_duration": true,
+    "cover_time_pct": null
+  },
+  "deliverables": {
+    "required": ["master", "media-info", "qc-report", "contact-sheet", "timeline"],
+    "optional": ["preview", "cover", "captions", "clean-master", "audio-stems", "alternate-encodes"]
+  },
+  "qc": {
+    "duration_tolerance_s": 0.1,
+    "fps_tolerance": 0.01,
+    "black_interval_s": 0.25,
+    "freeze_interval_s": 1.0,
+    "hard_gates": ["playable-complete-decode", "required-content-present", "format-matches-profile", "audio-within-true-peak", "captions-inside-safe-area"],
+    "visual_checks": ["entity-fidelity", "environment-continuity", "prop-continuity", "screen-direction", "narrative-order"],
+    "soft_warnings": ["brief-hand-artifact", "minor-background-drift", "secondary-motion-imperfection"]
+  }
+}

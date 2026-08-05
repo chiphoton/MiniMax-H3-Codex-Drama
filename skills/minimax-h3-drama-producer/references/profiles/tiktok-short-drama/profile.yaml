@@ -1,0 +1,95 @@
+{
+  "schema_version": "1.0",
+  "id": "tiktok-short-drama",
+  "display_name": "TikTok Short Drama",
+  "version": "1.0.0",
+  "kind": "primary",
+  "inherits": "base-video",
+  "summary": "Vertical, hook-first short drama with escalating conflict, an emotional or identity payoff, readable social captions, and a concise final value beat.",
+  "selection": {
+    "viewer_outcomes": ["immediate curiosity", "escalating tension", "satisfying payoff"],
+    "platforms": ["TikTok", "Douyin", "Reels", "Shorts"],
+    "signals": ["short drama", "爽剧", "反转", "身份揭晓", "职场冲突", "vertical narrative"],
+    "exclusions": ["slow observational film", "feature-length narrative", "claim-led product advertisement"]
+  },
+  "format": {
+    "aspect_ratio": "9:16",
+    "width": 1080,
+    "height": 1920,
+    "fps": 24,
+    "resolution_label": "vertical social master",
+    "duration_s": {"min": 15, "target": 45, "max": 90}
+  },
+  "story": {
+    "authority": "user",
+    "expand_only_on_request": true,
+    "required_beats": [
+      {"id": "hook", "start_pct": 0, "end_pct": 8, "purpose": "Open on conflict, danger, humiliation, surprise, or an irresistible unanswered question."},
+      {"id": "setup", "start_pct": 8, "end_pct": 28, "purpose": "Clarify the relationship, immediate stakes, and what the protagonist refuses or wants."},
+      {"id": "escalation", "start_pct": 28, "end_pct": 62, "purpose": "Increase pressure and reveal competence, evidence, or a failed counterattack."},
+      {"id": "payoff", "start_pct": 62, "end_pct": 90, "purpose": "Deliver the user-authored reversal, reveal, justice, or emotional release."},
+      {"id": "value-tag", "start_pct": 90, "end_pct": 100, "purpose": "End on a concise consequence, value line, or comment-driving question."}
+    ],
+    "pacing": ["Show the hook within two seconds.", "Shorten setup shots as pressure rises.", "Give the payoff a longer reaction hold than the setup cuts."]
+  },
+  "assets": {
+    "required_roles": ["story-brief", "main-character-definition"],
+    "recommended_roles": ["character-identity", "wardrobe", "environment", "voice", "caption-style"],
+    "recurring_entity_masters": true,
+    "keyframe_policy": "all-shots"
+  },
+  "shots": {
+    "default_duration_s": {"min": 3, "max": 7},
+    "key_shot_classes": ["hook", "crisis", "competence", "reveal", "payoff"],
+    "takes": {"ordinary": 1, "key": 2, "max_valid_per_shot": 2, "technical_retries": 1},
+    "allowed_routes": ["text-to-video", "frame-to-video", "first-last-frame", "reference-to-video", "video-edit"]
+  },
+  "image_generation": {
+    "create_missing_masters": true,
+    "preserve_source_authority": true,
+    "generation_order": ["character-and-entity-masters", "scene-masters", "storyboard", "all-shot-keyframes"],
+    "exact_text_in_post": true
+  },
+  "video_generation": {
+    "backend": "comfyui",
+    "synchronous_default": true,
+    "exact_prompt_preservation": true,
+    "route_per_shot": true
+  },
+  "audio": {
+    "voice": "auto",
+    "native_audio": "auto",
+    "sfx": "required",
+    "music": "auto",
+    "target_lufs": -14,
+    "true_peak_db": -1.5
+  },
+  "captions": {
+    "mode": "on",
+    "max_lines": 2,
+    "top_safe_pct": 12,
+    "bottom_safe_pct": 18,
+    "keyword_highlight": true
+  },
+  "editing": {
+    "backend": "ffmpeg",
+    "rhythm": ["Open without a logo card.", "Use hard cuts for confrontation.", "Use sound bridges before reveals.", "Hold reaction and consequence after the payoff."],
+    "allowed_transitions": ["cut", "fadewhite", "fadeblack", "wipeleft", "wiperight"],
+    "max_transition_s": 0.25,
+    "lock_output_duration": true,
+    "cover_time_pct": 72
+  },
+  "deliverables": {
+    "required": ["master", "media-info", "qc-report", "contact-sheet", "timeline", "captions", "cover", "preview"],
+    "optional": ["clean-master", "dialogue-stem", "music-and-sfx-stem", "alternate-hook"]
+  },
+  "qc": {
+    "duration_tolerance_s": 0.1,
+    "fps_tolerance": 0.01,
+    "black_interval_s": 0.2,
+    "freeze_interval_s": 0.8,
+    "hard_gates": ["playable-complete-decode", "all-story-beats-present", "main-character-identity-stable", "vertical-format-correct", "dialogue-intelligible", "captions-inside-social-safe-area"],
+    "visual_checks": ["face-hair-wardrobe-continuity", "environment-layout", "prop-state", "screen-direction", "hook-clarity", "payoff-reaction", "caption-readability"],
+    "soft_warnings": ["brief-hand-artifact", "minor-background-drift", "noncritical-lip-sync-variation"]
+  }
+}

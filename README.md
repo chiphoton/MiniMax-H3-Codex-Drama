@@ -1,221 +1,196 @@
 <p align="center">
-  <img src="docs/minimax-h3-skills-cover.png" alt="MiniMax H3 Prompt Skills — an AI film director surrounded by five creative workflow panels" width="100%">
+  <a href="README_zh.md">简体中文</a> ·
+  <a href="docs/skill-config.md">⚙️ Skill configuration</a>
 </p>
-
-<h1 align="center">🎬✨ MiniMax H3 Prompt Skills ✨🎬</h1>
 
 <p align="center">
-  <strong>Six reusable skills for directing, improving, debugging, and running MiniMax H3 video prompts.</strong><br>
-  🧭 Route the idea · ✍️ Build the shot · 🖼️ Animate frames · 🎛️ Bind references · ✂️ Edit precisely · ⚙️ Run in ComfyUI
+  <img src="docs/minimax-h3-skills-cover.png" alt="MiniMax-H3 Drama — AI video production in Codex" width="100%">
 </p>
 
----
-
-## 🤝 Create with Codex + ComfyUI
-
-Turn a plain-language idea and optional reference media into a finished MiniMax H3 video without leaving Codex. The `minimax-h3-comfyui` skill connects the conversation to your local or self-hosted ComfyUI instance and handles the workflow from preparation through retrieval.
-
-- **Prompt naturally:** describe the shot in ordinary language and attach images, video, or audio when they should guide the result.
-- **Route automatically:** run the matching pinned official text-to-video, image-to-video, or reference-to-video workflow.
-- **Execute reliably:** upload inputs, resolve installed models, patch only declared fields, validate the graph, and submit it to ComfyUI.
-- **Stay in control:** preserve your prompt and official workflow defaults, opt into prompt enhancement, run headlessly, or load the prepared graph onto the live ComfyUI canvas.
-- **Get the result back:** wait for Codex to monitor and return the finished video inline, or submit asynchronously and keep the `prompt_id` for later.
+<h1 align="center">🎬 MiniMax-H3 Drama</h1>
 
 <p align="center">
-  <img src="docs/codex-comfyui.png" alt="Codex turns an attached image and a natural-language request into a three-second speech video through ComfyUI" width="100%">
+  <strong>Turn a story, campaign brief, or reference pack into a finished drama video—inside Codex.</strong><br>
+  👤 Character design · 🏙️ Scene design · 🧩 Storyboards · 🎞️ MiniMax H3 generation · ✂️ Post-production · ✅ QC
 </p>
 
-## 🚀 One-command installation
+<p align="center">
+  <code>Codex Plugin</code> · <code>MiniMax H3</code> · <code>GPT-Image</code> · <code>ComfyUI</code> · <code>FFmpeg</code>
+</p>
 
-Install all six skills:
+MiniMax-H3 Drama is a **Codex-first video production plugin**, not just a prompt collection. Codex plans the production, creates reusable visual sources of truth, routes every shot to the right MiniMax H3 workflow, monitors local ComfyUI, and delivers a resumable project with picture, sound, captions, and QC.
 
-```bash
-npx skills add chiphoton/MiniMax-H3-Prompt-Skills
-```
+## ✨ Why creators use it
 
-Install globally:
+| Highlight | What you get |
+|---|---|
+| 🎭 **A complete production, not one clip** | Brief → character/product bible → scene masters → storyboard → keyframes → shots → master |
+| 🧬 **Cross-shot consistency** | Identity, wardrobe, product geometry, locations, props, screen direction, light, and audio are tracked explicitly |
+| 🧠 **Profile-driven direction** | Built-in short-drama and commercial grammar, plus reusable profiles distilled from your own reference videos |
+| 🛠️ **Local, deterministic finishing** | Official H3 workflows through local ComfyUI; versioned FFmpeg editing, mixing, captions, exports, and QC |
+| 🔁 **Resumable by design** | Every prompt, input hash, workflow, `prompt_id`, take, selection, assumption, and artifact stays in the project ledger |
 
-```bash
-npx skills add chiphoton/MiniMax-H3-Prompt-Skills --global
-```
+<p align="center">
+  <img src="docs/codex-comfyui.png" alt="Codex sends a reference-led request to local ComfyUI and returns the generated video" width="52%">
+</p>
 
-Install for Codex:
+<p align="center"><em>From a natural-language request and references to a returned video without leaving the Codex task.</em></p>
+
+## 🚀 Quick start
+
+### 1. Install for Codex
+
+This repository is packaged as a Codex Plugin with eight skills and a pinned local ComfyUI MCP connection. For the complete bundle, add it to a local plugin marketplace and install **MiniMax-H3 Drama** from Codex Plugins; see the [Codex local plugin guide](https://developers.openai.com/plugins/build/plugins#build-your-own-curated-plugin-list).
+
+For a skills-only installation:
 
 ```bash
 npx skills add chiphoton/MiniMax-H3-Prompt-Skills --agent codex
 ```
 
-## 🌐 Open WebUI installation
+> Migrating from `0.1.x`? Remove the old `minimax-h3-prompt-skills` plugin before installing `minimax-h3-drama` so the specialist skills are not registered twice.
 
-[Open WebUI Skills](https://docs.openwebui.com/features/workspace/skills/) require each imported skill to be a single self-contained Markdown file:
+### 2. Prepare the local runtime
 
-1. Open **Workspace → Skills**.
-2. Choose **Import**.
-3. Import the `.md` files from [`adapter/open-webui`](adapter/open-webui).
-4. Attach the skills to a model, enable them for a chat, or invoke one with `$`.
+Run ComfyUI at `http://localhost:8188` with compatible MiniMax H3 models and nodes. Install FFmpeg/FFprobe for assembly and QC. The plugin checks the environment before expensive work; it does **not** silently download models, install nodes, start services, or restart ComfyUI.
 
-The Open WebUI editions inline all templates, examples, routing logic, and reference guidance. They do not depend on sibling files or image assets.
+### 3. Direct your first drama
 
-## 🧰 The six skills
-
-| | Skill | Best for | What it returns |
-|---:|---|---|---|
-| 🧭 | [`minimax-h3-adviser`](skills/minimax-h3-adviser/SKILL.md) | Starting from an idea, uncertain asset strategy, weak draft, or failed generation | The right workflow, assumptions, settings, asset roles, a copy-ready prompt, and risk checks |
-| ✍️ | [`minimax-h3-text-to-video`](skills/minimax-h3-text-to-video/SKILL.md) | Creating a complete clip from language with no controlling media | Timed action, camera, look, audio, constraints, and fal.ai settings |
-| 🖼️ | [`minimax-h3-frame-to-video`](skills/minimax-h3-frame-to-video/SKILL.md) | Animating an exact opening frame or bridging exact first and last frames | A continuous motion bridge with composition and identity locks |
-| 🎛️ | [`minimax-h3-reference-to-video`](skills/minimax-h3-reference-to-video/SKILL.md) | Using images, videos, or audio for identity, style, motion, camera, performance, music, or voice | An asset ledger, bounded reference assignments, timed beats, and conflict checks |
-| ✂️ | [`minimax-h3-video-editor`](skills/minimax-h3-video-editor/SKILL.md) | Changing part of an existing video while preserving everything else | Change-and-preserve pairs, integration instructions, and preservation checks |
-| ⚙️ | [`minimax-h3-comfyui`](skills/minimax-h3-comfyui/SKILL.md) | Running a finished H3 prompt through local or self-hosted ComfyUI | A validated queued job, `prompt_id`, diagnostics, and the fetched video by default |
-
-## 🗺️ How the skills relate
-
-```mermaid
-flowchart TD
-    U["💡 Idea, draft, assets, or failed result"] --> A["🧭 MiniMax H3 Adviser"]
-    A --> D{"What should control the result?"}
-    D -->|"No media"| T["✍️ Text to Video"]
-    D -->|"Exact opening or closing frames"| F["🖼️ Frame to Video"]
-    D -->|"Identity, style, motion, camera, or audio"| R["🎛️ Reference to Video"]
-    D -->|"Localized change to an existing video"| E["✂️ Video Editor"]
-    T --> O["🎬 Copy-ready H3 prompt"]
-    F --> O
-    R --> O
-    E --> O
-    O -->|"Explicit run / ComfyUI intent"| C["⚙️ Pinned ComfyUI T2V, I2V, or R2V workflow"]
-    C --> V["🎞️ Generated video"]
+```text
+$minimax-h3-drama-producer
+Create a 45-second 9:16 workplace reversal drama from my attached story.
+Preserve my characters and dialogue. Design a consistent character sheet and
+office scene master, build an 8-shot storyboard, generate every shot, add
+captions and sound, and deliver the finished vertical master.
+Use the tiktok-short-drama profile. [mode=fast]
 ```
 
-The adviser can be used by itself. It asks one high-impact question at a time in guided mode, or completes the prompt immediately when the user asks for fast mode. It invokes ComfyUI only when the user explicitly asks to run, submit, queue, preview, or fetch a generation.
+Remove `[mode=fast]` when you want to approve the production plan and visual lock before generation.
 
-## 💬 Usage examples
+## 🐍 One production, folded into a compact flow
 
-### 🧭 Let the adviser choose the workflow
+```mermaid
+flowchart TB
+    subgraph R1["Plan and lock"]
+        direction LR
+        A["① 💡 Story / brief"] --> B["② 🧠 Resolve profile"] --> C["③ 👤 Character & product bible"] --> D["④ 🏙️ Scene masters"]
+    end
+    subgraph R2["Design and generate"]
+        direction RL
+        E["⑤ 🧩 Storyboard & keyframes"] --> F["⑥ 🎯 Route every shot"] --> G["⑦ 🎞️ H3 + ComfyUI"] --> H["⑧ ⭐ Select takes"]
+    end
+    subgraph R3["Finish and deliver"]
+        direction LR
+        I["⑨ ✂️ Edit, voice, captions & sound"] --> J["⑩ 🔍 Technical + visual QC"] --> K["⑪ 📦 Master + reproducible project"]
+    end
+    R1 --> R2 --> R3
+```
+
+Guided mode pauses after the production plan and again after the visual sources of truth. Fast mode records conservative assumptions and continues automatically.
+
+## 🪄 Representative prompts
+
+<details open>
+<summary><strong>🎭 Produce a complete short drama</strong></summary>
+
+```text
+$minimax-h3-drama-producer
+Turn this script and cast reference pack into a 60-second vertical short drama.
+Keep the plot and dialogue unchanged. Design missing locations and shot coverage,
+lock character continuity, then finish picture, dialogue, subtitles, music, and QC.
+```
+
+</details>
+
+<details>
+<summary><strong>🧪 Distill a reusable house style</strong></summary>
+
+```text
+$minimax-h3-profile-distiller
+Analyze these three local reference videos. Extract their pacing, shot grammar,
+camera behavior, caption style, sound pattern, and QC rules into a reusable
+profile. Exclude their people, branding, dialogue, plot, and music melody.
+```
+
+</details>
+
+<details>
+<summary><strong>🎥 Design and run one H3 shot</strong></summary>
 
 ```text
 $minimax-h3-adviser
-I have a portrait of a singer, a clip whose camera movement I like, and a vocal track.
-Create a 12-second cinematic performance. Use your best judgment.
+Image 1 controls the actor's identity. Video 1 controls only the handheld camera
+motion. Create an 8-second tense corridor reveal, then run it in ComfyUI.
+[return=true] [load_workflow=true] [preview=true]
 ```
 
-Expected route: **reference to video**. The portrait controls identity, the video controls only camera motion, and the audio controls vocal performance and synchronization.
+</details>
 
-### ✍️ Invent a shot entirely from text
+See [skill configuration](docs/skill-config.md) for every control flag, configuration file, model override, generation setting, and ready-to-copy combination.
 
-```text
-$minimax-h3-text-to-video
-Create a 10-second 16:9 premium ad for a brushed-steel espresso machine.
-One continuous shot, quiet pre-dawn mood, synchronized product sounds, and a stable hero ending.
-```
+## 🧰 Eight skills, one production system
 
-### 🖼️ Animate an exact first frame
+| | Skill | Role |
+|---:|---|---|
+| 🎬 | [`minimax-h3-drama-producer`](skills/minimax-h3-drama-producer/SKILL.md) | Produce or resume a complete multi-shot video project |
+| 🧪 | [`minimax-h3-profile-distiller`](skills/minimax-h3-profile-distiller/SKILL.md) | Distill local reference videos into a safe, reusable production profile |
+| 🧭 | [`minimax-h3-adviser`](skills/minimax-h3-adviser/SKILL.md) | Choose the workflow, improve a prompt, or diagnose a failed result |
+| ✍️ | [`minimax-h3-text-to-video`](skills/minimax-h3-text-to-video/SKILL.md) | Invent a complete shot from language |
+| 🖼️ | [`minimax-h3-frame-to-video`](skills/minimax-h3-frame-to-video/SKILL.md) | Animate an exact first frame or bridge exact first/last frames |
+| 🎛️ | [`minimax-h3-reference-to-video`](skills/minimax-h3-reference-to-video/SKILL.md) | Bind identity, design, style, motion, camera, performance, or audio references |
+| ✂️ | [`minimax-h3-video-editor`](skills/minimax-h3-video-editor/SKILL.md) | Make a precise change while stating what must remain unchanged |
+| ⚙️ | [`minimax-h3-comfyui`](skills/minimax-h3-comfyui/SKILL.md) | Prepare, validate, submit, monitor, and fetch local H3 workflows |
 
-```text
-$minimax-h3-frame-to-video
-Use the uploaded exhibition poster as the exact opening frame.
-Animate only the grid, sculpture, and red blocks for 8 seconds. Keep every printed word and the border locked.
-```
+## 🎨 Make visual direction concrete
 
-### 🎛️ Give every reference one job
-
-```text
-$minimax-h3-reference-to-video
-Image 1 defines the shoe. Image 2 defines the athlete. Image 3 supplies only the wet dawn palette.
-Video 1 supplies only stride mechanics and edit rhythm. Make a 15-second vertical campaign.
-```
-
-### ✂️ Make a surgical edit
-
-```text
-$minimax-h3-video-editor
-In Video 1, replace only the illuminated storefront sign with Image 1 and relight the scene for early night.
-Preserve the camera path, pedestrians, traffic timing, architecture, and source audio.
-```
-
-### ⚡ Skip questions with fast mode
-
-Add any of these phrases when you want an immediate result:
-
-```text
-Use your best judgment.
-Skip the grilling.
-[mode=fast]
-Give prompt immediately.
-```
-
-### ⚙️ Run a finished prompt in ComfyUI
-
-```text
-$minimax-h3-comfyui
-Run this prompt with the uploaded first frame. [return=true]
-```
-
-The default is to wait for completion and fetch the video. Use `[return=false]` or `[return=0]` to submit asynchronously. Prompt text is preserved unless `[prompt_enhance=true]` or `[pe=1]` is present.
-
-Runs are headless by default: `[load_workflow=false]` does not initialize or open the Codex browser and produces no preview or canvas commentary. Use `[load_workflow=true]` only when you want the prepared workflow loaded into the live ComfyUI canvas; add `[preview=false]` to keep any required browser work in the background.
-
-## ⚙️ ComfyUI setup
-
-The repository is also a Codex plugin. Its [`.mcp.json`](.mcp.json) pins [`artokun/comfyui-mcp`](https://github.com/artokun/comfyui-mcp) 0.49.3 and targets `http://localhost:8188`. ComfyUI must already be running; the skill never downloads models, installs nodes, or restarts ComfyUI without explicit permission.
-
-Configuration is optional. Settings layer from user config to project config, with project values taking precedence:
-
-```text
-~/.config/minimax-h3-comfyui/comfy-config.json
-<project-root>/.config/comfy-config.json
-```
-
-Copy [`comfy-config.example.json`](skills/minimax-h3-comfyui/assets/comfy-config.example.json) when you need overrides. Empty model or generation values preserve the official workflow defaults. If `localhost:8188` is reachable, the skill continues silently; otherwise it offers retry or a config change. A custom address must also be reflected in the MCP server's `COMFYUI_URL` target.
-
-The skill contains untouched official UI graphs and deterministic API-format derivatives for T2V, I2V, and R2V. It patches only declared semantic fields. Custom attached workflow adaptation is intentionally deferred.
-
-## 🎨 Visual prompt palette
-
-The adviser includes visual atlases for discussing creative direction without relying on vague style words.
+The adviser can show visual atlases so “cinematic” becomes a controllable choice instead of a vague style word.
 
 <table>
   <tr>
     <td align="center"><strong>📐 Framing</strong><br><img src="skills/minimax-h3-adviser/assets/framing-atlas.png" alt="Framing atlas" width="100%"></td>
-    <td align="center"><strong>🔭 Lens feel</strong><br><img src="skills/minimax-h3-adviser/assets/lens-atlas.png" alt="Lens feel atlas" width="100%"></td>
-  </tr>
-  <tr>
-    <td align="center"><strong>💡 Lighting</strong><br><img src="skills/minimax-h3-adviser/assets/lighting-atlas.png" alt="Lighting atlas" width="100%"></td>
-    <td align="center"><strong>🎞️ Texture</strong><br><img src="skills/minimax-h3-adviser/assets/texture-atlas.png" alt="Visual texture atlas" width="100%"></td>
-  </tr>
-  <tr>
     <td align="center"><strong>🎥 Camera motion</strong><br><img src="skills/minimax-h3-adviser/assets/camera-motion-atlas.png" alt="Camera motion atlas" width="100%"></td>
-    <td align="center"><strong>💫 Transitions</strong><br><img src="skills/minimax-h3-adviser/assets/transition-atlas.png" alt="Transition atlas" width="100%"></td>
+    <td align="center"><strong>💡 Lighting</strong><br><img src="skills/minimax-h3-adviser/assets/lighting-atlas.png" alt="Lighting atlas" width="100%"></td>
   </tr>
 </table>
 
-The atlases are optional conversation aids. The generated MiniMax prompt remains text-only.
+The generated MiniMax H3 prompt remains text-only; the atlases are conversation aids.
 
-## 📦 Repository layout
+## 🎚️ Built-in production profiles
+
+Profiles are declarative data, never executable code:
 
 ```text
-.
-├── skills/                  # Native Agent Skills with references and visual assets
-│   ├── minimax-h3-adviser/
-│   ├── minimax-h3-text-to-video/
-│   ├── minimax-h3-frame-to-video/
-│   ├── minimax-h3-reference-to-video/
-│   ├── minimax-h3-video-editor/
-│   └── minimax-h3-comfyui/
-├── .codex-plugin/plugin.json # Codex plugin metadata
-├── .mcp.json                 # Pinned local ComfyUI MCP server
-├── adapter/open-webui/      # Self-contained one-file Markdown editions
-├── docs/                    # README artwork
-└── outputs/                 # Local generated media (gitignored)
+base-video + one primary profile + explicit user overrides
 ```
 
-## 🧠 Prompting philosophy
+| Profile | Best for | Signature defaults |
+|---|---|---|
+| `tiktok-short-drama` | Conflict, emotion, reveal, payoff | 9:16, hook-first pacing, shot keyframes, captions on |
+| `commercial-ad` | Promise, proof, product hero, CTA | 16:9 master, product geometry locks, deterministic brand text |
 
-- Give every reference one explicit job and block unrelated influence.
-- Prefer two or three controllable beats over an overloaded short narrative.
-- Pair each requested edit with what must stay unchanged.
-- Direct sound as deliberately as picture when audio matters.
-- Use a few failure-specific constraints instead of generic quality-word piles.
-- Preserve detailed user choices; add creative assumptions only when the brief is sparse.
+Use `minimax-h3-profile-distiller` to learn a new production grammar from local references without copying their source-specific content.
 
-## ⚠️ Provider notes
+## 📦 Reproducible output
 
-The prompt specialists include fal.ai-oriented endpoint and capability guidance for MiniMax H3. Provider schemas can change, so verify current limits before implementing production automation. Only `minimax-h3-comfyui`, or the adviser on explicit execution intent, submits generation jobs.
+```text
+outputs/<project>/
+├── planning/ + profile/ + prompts/ + images/
+├── workflows/ + clips/ + audio/ + subtitles/
+├── edit/ + qc/ + final/ + logs/
+└── project.yaml
+```
+
+Re-running the same project resumes completed work and versions new attempts instead of erasing history. A successful delivery includes the local master, media info, contact sheet, technical/visual QC report, timeline, and reproducible export instructions.
+
+## 🔌 Notes
+
+- Official pinned T2V, I2V, and R2V graphs are prepared deterministically; arbitrary custom workflow adaptation is intentionally out of scope.
+- Voice and captions can be `auto`, `on`, or `off`. No paid voice service is called silently.
+- FFmpeg is the v1 editing backend; selected clips, audio stems, captions, and timeline data remain available for manual NLE import.
+- Prompt-only Open WebUI editions remain in [`adapter/open-webui`](adapter/open-webui/). The producer and profile distiller are Codex-specific.
+
+---
+
+<p align="center">
+  <strong>Bring the story. Let Codex build the production system around it. 🎬</strong>
+</p>

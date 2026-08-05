@@ -1,0 +1,4 @@
+interface:
+  display_name: "MiniMax-H3 Profile Distiller"
+  short_description: "Distill reusable production profiles from videos"
+  default_prompt: "Use $minimax-h3-profile-distiller to distill these reference videos into a reusable profile."

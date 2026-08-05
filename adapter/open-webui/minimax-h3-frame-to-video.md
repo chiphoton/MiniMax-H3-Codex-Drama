@@ -11,7 +11,7 @@ Direct motion from an exact first frame, optionally landing on an exact last fra
 
 Use this workflow when the image is the actual first frame, not merely a style or identity reference. With two images, require the first to be the opening frame and the second to be the closing frame. If media instead supplies identity, style, motion, voice, or edit rhythm, recommend the MiniMax H3 reference-to-video workflow.
 
-For fal.ai, recommend endpoint `minimax/h3/image-to-video`, duration 5–15 seconds, resolution `768P` or `2K`, and note that output aspect ratio follows the first-frame image. Treat provider capabilities as changeable; verify them when the user requests current API accuracy.
+Recommend 5–15 seconds, `768P` for iteration or `2K` for a final pass when supported, and note that output aspect ratio follows the first-frame image. Treat these as starting settings and let the executor validate the installed workflow.
 
 ## Build the motion bridge
 
@@ -101,7 +101,7 @@ No cut, dissolve, abrupt morph, duplicated person, sliding furniture, camera-dir
 
 Provide:
 
-- input-frame roles and suggested duration, resolution, and endpoint;
+- input-frame roles and suggested duration, resolution, and workflow route;
 - material assumptions, if any;
 - one copy-ready prompt;
 - 2–4 continuity checks.

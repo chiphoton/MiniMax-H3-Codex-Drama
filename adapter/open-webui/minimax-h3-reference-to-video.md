@@ -11,7 +11,7 @@ Turn multimodal assets into one coherent MiniMax H3 direction by giving every as
 
 Use this workflow when media acts as a reference rather than an exact first or last frame. If the only visual input is the literal opening frame, recommend the MiniMax H3 frame-to-video workflow. If an existing video is being changed locally while the rest stays stable, recommend the MiniMax H3 video-editor workflow.
 
-For fal.ai, recommend endpoint `minimax/h3/reference-to-video`, duration 5–15 seconds, resolution `768P` or `2K`, and a fixed or `adaptive` aspect ratio. The current fal schema allows up to 9 images, 3 videos, and 3 audio clips with no more than 12 files total. Reference video and audio clips are 2–15 seconds each with no more than 15 seconds combined per modality; audio cannot be the only reference type. Treat provider capabilities as changeable; verify them when the user requests current API accuracy.
+Recommend 5–15 seconds, `768P` for iteration or `2K` for a final pass when supported, and a fixed or `adaptive` aspect ratio. As a conservative complexity budget, prefer no more than 9 images, 3 videos, 3 audio clips, or 12 files total; keep reference video and audio clips within 2–15 seconds and avoid audio as the only reference type. Let the executor validate the installed workflow.
 
 ## Create an asset ledger first
 
@@ -125,7 +125,7 @@ Preserve athlete identity and exact shoe design in every shot. Exactly one athle
 Provide:
 
 - a compact asset ledger;
-- suggested duration, aspect ratio, resolution, and endpoint;
+- suggested duration, aspect ratio, resolution, and workflow route;
 - material assumptions, if any;
 - one copy-ready prompt;
 - 2–4 reference-conflict or continuity checks.

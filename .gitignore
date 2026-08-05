@@ -1,4 +1,9 @@
+.codex/
+.claude/
+.opencode/
+
 .DS_Store
 **/.DS_Store
 .config/comfy-config.json
+inputs/
 outputs/

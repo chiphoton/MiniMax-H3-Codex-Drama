@@ -1,0 +1,94 @@
+{
+  "schema_version": "1.0",
+  "id": "commercial-ad",
+  "display_name": "Commercial Ad",
+  "version": "1.0.0",
+  "kind": "primary",
+  "inherits": "base-video",
+  "summary": "Claim-disciplined commercial with a clear promise, product proof, premium hero imagery, brand consistency, and a legible call to action.",
+  "selection": {
+    "viewer_outcomes": ["understand the value proposition", "believe the proof", "remember the product", "act on the CTA"],
+    "platforms": ["web", "social", "presentation", "paid media"],
+    "signals": ["advertisement", "commercial", "campaign", "product launch", "promo", "宣传片", "产品广告"],
+    "exclusions": ["unverified claims", "character-first episodic drama", "source-specific brand imitation"]
+  },
+  "format": {
+    "aspect_ratio": "16:9",
+    "width": 1920,
+    "height": 1080,
+    "fps": 24,
+    "resolution_label": "1080p commercial master",
+    "duration_s": {"min": 6, "target": 15, "max": 30}
+  },
+  "story": {
+    "authority": "user",
+    "expand_only_on_request": true,
+    "required_beats": [
+      {"id": "promise", "start_pct": 0, "end_pct": 18, "purpose": "State or show the approved customer promise without unsupported claims."},
+      {"id": "demonstration", "start_pct": 18, "end_pct": 58, "purpose": "Demonstrate the product, service, or benefit through visible evidence."},
+      {"id": "hero", "start_pct": 58, "end_pct": 82, "purpose": "Deliver a stable, premium product or brand hero moment."},
+      {"id": "cta", "start_pct": 82, "end_pct": 100, "purpose": "End with the approved identity, offer, or call to action."}
+    ],
+    "pacing": ["Put the product or benefit on screen early.", "Slow down for proof and the hero view.", "Give the CTA enough reading time."]
+  },
+  "assets": {
+    "required_roles": ["product-or-service-brief", "approved-claims"],
+    "recommended_roles": ["product-geometry", "brand-style", "environment", "logo", "voice", "music", "cta-copy"],
+    "recurring_entity_masters": true,
+    "keyframe_policy": "key-shots"
+  },
+  "shots": {
+    "default_duration_s": {"min": 2, "max": 6},
+    "key_shot_classes": ["promise", "proof", "product-hero", "brand-lockup", "cta"],
+    "takes": {"ordinary": 1, "key": 2, "max_valid_per_shot": 2, "technical_retries": 1},
+    "allowed_routes": ["text-to-video", "frame-to-video", "first-last-frame", "reference-to-video", "video-edit"]
+  },
+  "image_generation": {
+    "create_missing_masters": true,
+    "preserve_source_authority": true,
+    "generation_order": ["product-and-entity-masters", "scene-masters", "storyboard", "key-shot-keyframes"],
+    "exact_text_in_post": true
+  },
+  "video_generation": {
+    "backend": "comfyui",
+    "synchronous_default": true,
+    "exact_prompt_preservation": true,
+    "route_per_shot": true
+  },
+  "audio": {
+    "voice": "auto",
+    "native_audio": "auto",
+    "sfx": "required",
+    "music": "auto",
+    "target_lufs": -14,
+    "true_peak_db": -1.5
+  },
+  "captions": {
+    "mode": "auto",
+    "max_lines": 2,
+    "top_safe_pct": 8,
+    "bottom_safe_pct": 12,
+    "keyword_highlight": false
+  },
+  "editing": {
+    "backend": "ffmpeg",
+    "rhythm": ["Cut on product action or tactile sound.", "Use cleaner transitions than narrative drama.", "Hold product geometry and CTA text stable."],
+    "allowed_transitions": ["cut", "fade", "fadeblack", "fadewhite", "wipeleft", "wiperight"],
+    "max_transition_s": 0.5,
+    "lock_output_duration": true,
+    "cover_time_pct": 72
+  },
+  "deliverables": {
+    "required": ["master", "media-info", "qc-report", "contact-sheet", "timeline", "cover"],
+    "optional": ["preview", "captions", "clean-master", "voice-stem", "music-and-sfx-stem", "vertical-encode", "square-encode"]
+  },
+  "qc": {
+    "duration_tolerance_s": 0.1,
+    "fps_tolerance": 0.01,
+    "black_interval_s": 0.2,
+    "freeze_interval_s": 1.0,
+    "hard_gates": ["playable-complete-decode", "approved-claims-only", "product-geometry-stable", "brand-assets-correct", "cta-readable", "format-matches-delivery"],
+    "visual_checks": ["product-material-and-proportion", "logo-and-package-integrity", "lighting-and-reflections", "demonstration-causality", "hero-hold", "cta-safe-area"],
+    "soft_warnings": ["minor-background-drift", "noncritical-reflection-variation", "secondary-particle-imperfection"]
+  }
+}

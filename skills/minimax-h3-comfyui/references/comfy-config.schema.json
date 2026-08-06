@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/chiphoton/MiniMax-H3-Prompt-Skills/comfy-config.schema.json",
+  "$id": "https://github.com/chiphoton/MiniMax-H3-Codex-Drama/comfy-config.schema.json",
   "title": "MiniMax H3 ComfyUI configuration",
   "type": "object",
   "additionalProperties": false,

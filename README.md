@@ -40,19 +40,31 @@ MiniMax-H3 Drama is a **Codex-first video production plugin**, not just a prompt
 
 ### 1. Install for Codex
 
-This repository is packaged as a Codex Plugin with eight skills and a pinned local ComfyUI MCP connection. For the complete bundle, add it to a local plugin marketplace and install **MiniMax-H3 Drama** from Codex Plugins; see the [Codex local plugin guide](https://developers.openai.com/plugins/build/plugins#build-your-own-curated-plugin-list).
+This repository is packaged as a Codex Plugin with eight skills and a pinned local ComfyUI MCP connection. Install the complete bundle from its repository marketplace:
+
+```bash
+codex plugin marketplace add chiphoton/MiniMax-H3-Codex-Drama
+codex plugin add minimax-h3-drama@chiphoton
+codex plugin list --json
+```
+
+Start a new Codex task after installation so the bundled skills and MCP server are loaded.
 
 For a skills-only installation:
 
 ```bash
-npx skills add chiphoton/MiniMax-H3-Prompt-Skills --agent codex
+npx skills add chiphoton/MiniMax-H3-Codex-Drama --all -g -a codex -y
 ```
+
+The skills-only route does not install the bundled ComfyUI MCP connection.
 
 > Migrating from `0.1.x`? Remove the old `minimax-h3-prompt-skills` plugin before installing `minimax-h3-drama` so the specialist skills are not registered twice.
 
 ### 2. Prepare the local runtime
 
-Run ComfyUI at `http://localhost:8188` with compatible MiniMax H3 models and nodes. Install FFmpeg/FFprobe for assembly and QC. The plugin checks the environment before expensive work; it does **not** silently download models, install nodes, start services, or restart ComfyUI.
+Install Node.js and npm: the plugin launches the pinned `comfyui-mcp@0.49.3` package through `npx`, and its first launch may need network access to populate the npm cache. Run ComfyUI at `http://localhost:8188` with compatible MiniMax H3 models and nodes. Install FFmpeg/FFprobe for assembly and QC.
+
+The plugin checks the environment before expensive work; it does **not** silently download models, install ComfyUI nodes, start services, or restart ComfyUI.
 
 ### 3. Direct your first drama
 

@@ -40,19 +40,31 @@ MiniMax-H3 Drama 是一套 **Codex 优先的视频制作插件**，不只是提�
 
 ### 1. 安装到 Codex
 
-本仓库已按 Codex Plugin 结构打包，包含 8 个技能与固定版本的本地 ComfyUI MCP 连接。若要使用完整插件，请把仓库加入本地插件市场，并在 Codex Plugins 中安装 **MiniMax-H3 Drama**；参考 [Codex 本地插件指南](https://developers.openai.com/plugins/build/plugins#build-your-own-curated-plugin-list)。
+本仓库已按 Codex Plugin 结构打包，包含 8 个技能与固定版本的本地 ComfyUI MCP 连接。请从仓库市场安装完整插件：
+
+```bash
+codex plugin marketplace add chiphoton/MiniMax-H3-Codex-Drama
+codex plugin add minimax-h3-drama@chiphoton
+codex plugin list --json
+```
+
+安装完成后请新建一个 Codex 任务，以加载插件内的技能和 MCP 服务。
 
 如果只需安装技能：
 
 ```bash
-npx skills add chiphoton/MiniMax-H3-Prompt-Skills --agent codex
+npx skills add chiphoton/MiniMax-H3-Codex-Drama --all -g -a codex -y
 ```
+
+仅安装技能不会安装插件内置的 ComfyUI MCP 连接。
 
 > 从 `0.1.x` 升级？请先移除旧的 `minimax-h3-prompt-skills` 插件，再安装 `minimax-h3-drama`，避免同名专业技能被注册两次。
 
 ### 2. 准备本地运行环境
 
-在 `http://localhost:8188` 运行 ComfyUI，并准备兼容的 MiniMax H3 模型与节点；安装 FFmpeg/FFprobe 以完成剪辑和 QC。插件会在昂贵操作之前做环境检查，但**不会**静默下载模型、安装节点、启动服务或重启 ComfyUI。
+请先安装 Node.js 和 npm：插件会通过 `npx` 启动固定版本的 `comfyui-mcp@0.49.3`，首次启动时可能需要联网以填充 npm 缓存。在 `http://localhost:8188` 运行 ComfyUI，并准备兼容的 MiniMax H3 模型与节点；安装 FFmpeg/FFprobe 以完成剪辑和 QC。
+
+插件会在昂贵操作之前做环境检查，但**不会**静默下载模型、安装 ComfyUI 节点、启动服务或重启 ComfyUI。
 
 ### 3. 导演你的第一支短剧
 

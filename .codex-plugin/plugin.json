@@ -6,8 +6,9 @@
     "name": "chiphoton",
     "url": "https://github.com/chiphoton"
   },
-  "homepage": "https://github.com/chiphoton/MiniMax-H3-Prompt-Skills",
-  "repository": "https://github.com/chiphoton/MiniMax-H3-Prompt-Skills",
+  "homepage": "https://github.com/chiphoton/MiniMax-H3-Codex-Drama",
+  "repository": "https://github.com/chiphoton/MiniMax-H3-Codex-Drama",
+  "license": "MIT",
   "keywords": [
     "minimax-h3",
     "comfyui",
@@ -30,7 +31,7 @@
       "Read",
       "Write"
     ],
-    "websiteURL": "https://github.com/chiphoton/MiniMax-H3-Prompt-Skills",
+    "websiteURL": "https://github.com/chiphoton/MiniMax-H3-Codex-Drama",
     "defaultPrompt": [
       "Turn my story and references into a finished short video.",
       "Create a product commercial and deliver the final master.",

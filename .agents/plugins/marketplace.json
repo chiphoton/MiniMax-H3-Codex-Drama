@@ -1,0 +1,21 @@
+{
+  "name": "chiphoton",
+  "interface": {
+    "displayName": "Chiphoton"
+  },
+  "plugins": [
+    {
+      "name": "minimax-h3-drama",
+      "source": {
+        "source": "url",
+        "url": "https://github.com/chiphoton/MiniMax-H3-Codex-Drama.git",
+        "ref": "main"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Creativity"
+    }
+  ]
+}

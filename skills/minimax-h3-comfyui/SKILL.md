@@ -11,14 +11,16 @@ Run a finished MiniMax H3 prompt through ComfyUI using bundled official T2V, I2V
 
 Recognize these case-insensitive controls anywhere in the request:
 
-- `[return=true]`, `[return=1]`: wait for completion and fetch results. This is the default.
-- `[return=false]`, `[return=0]`: submit and return the `prompt_id` immediately.
-- `[prompt_enhance=true]`, `[pe=1]`: improve the prompt through the matching MiniMax H3 prompt specialist before execution.
-- `[prompt_enhance=false]`, `[pe=0]`: preserve the supplied prompt. This is the default.
-- `[preview=true|false]`: show or hide the ComfyUI browser after loading the prepared workflow. This has no effect when `load_workflow=false`.
-- `[load_workflow=true|false]`: replace the live canvas with the prepared workflow only when true. Default false. When false, stay headless: do not initialize or open a browser, and do not announce preview or canvas behavior.
+For every `<boolean>` below, accept `true`, `on`, `yes`, or `1` as true and `false`, `off`, `no`, or `0` as false.
+
+- `[return=<boolean>]`: wait for completion and fetch results when true; submit and return the `prompt_id` immediately when false. Default true.
+- `[prompt_enhance=<boolean>]`, `[pe=<boolean>]`: improve the prompt through the matching MiniMax H3 prompt specialist when true; preserve it when false. Default false.
+- `[preview=<boolean>]`: show or hide the ComfyUI browser after loading the prepared workflow. This has no effect when `load_workflow` resolves to false. Default true.
+- `[load_workflow=<boolean>]`: replace the live canvas with the prepared workflow when true. When false, stay headless: do not initialize or open a browser, and do not announce preview or canvas behavior. Default false.
 
 Strip control flags before sending text to MiniMax H3.
+
+Match every boolean flag name and value case-insensitively. If the same flag appears more than once, use its last occurrence. Treat any other value as invalid control syntax and stop before workflow preparation.
 
 Without an enhancement flag, treat the prompt as finished: do not silently rewrite, expand, translate, or “improve” it. If enhancement is enabled, load and apply exactly one matching specialist:
 

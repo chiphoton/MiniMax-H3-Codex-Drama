@@ -21,7 +21,15 @@ PROJECT_CONFIG = Path(".config") / "comfy-config.json"
 CONFIG_KEYS = {
     "connection": {"address"},
     "runtime": {"return", "preview", "load_workflow", "wait_timeout_minutes"},
-    "models": {"fl2va", "ref2va", "text_encoder", "video_vae", "audio_vae"},
+    "models": {
+        "fl2va",
+        "ref2va",
+        "text_encoder",
+        "video_vae",
+        "audio_vae",
+        "qwen_checkpoint",
+        "qwen_lora",
+    },
     "generation": {
         "width",
         "height",

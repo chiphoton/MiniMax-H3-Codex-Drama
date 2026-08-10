@@ -40,7 +40,7 @@ MiniMax-H3 Drama is a **Codex-first video production plugin**, not just a prompt
 
 ### 1. Install for Codex
 
-This repository is packaged as a Codex Plugin with eight skills and a pinned local ComfyUI MCP connection. Install the complete bundle from its repository marketplace:
+This repository is packaged as a Codex Plugin with nine skills and a pinned local ComfyUI MCP connection. Install the complete bundle from its repository marketplace:
 
 ```bash
 codex plugin marketplace add chiphoton/MiniMax-H3-Codex-Drama
@@ -140,7 +140,7 @@ motion. Create an 8-second tense corridor reveal, then run it in ComfyUI.
 
 See [skill configuration](docs/skill-config.md) for every control flag, configuration file, model override, generation setting, and ready-to-copy combination.
 
-## 🧰 Eight skills, one production system
+## 🧰 Nine skills, one production system
 
 | | Skill | Role |
 |---:|---|---|
@@ -152,6 +152,22 @@ See [skill configuration](docs/skill-config.md) for every control flag, configur
 | 🎛️ | [`minimax-h3-reference-to-video`](skills/minimax-h3-reference-to-video/SKILL.md) | Bind identity, design, style, motion, camera, performance, or audio references |
 | ✂️ | [`minimax-h3-video-editor`](skills/minimax-h3-video-editor/SKILL.md) | Make a precise change while stating what must remain unchanged |
 | ⚙️ | [`minimax-h3-comfyui`](skills/minimax-h3-comfyui/SKILL.md) | Prepare, validate, submit, monitor, and fetch local H3 workflows |
+| 🪄 | [`qwen-image-edit`](skills/qwen-image-edit/SKILL.md) | Run the pinned one/two-reference Qwen consistency-edit workflow |
+
+The Qwen skill is explicit-only. Invoke `$qwen-image-edit` to run an edit, or `$qwen-image-edit help` to show its complete [ComfyUI dependency and model guide](skills/qwen-image-edit/references/comfyui-workflow-install.md). Its default path copies the prompt payload directly into the workflow. All boolean bracket controls share the aliases documented in [skill configuration](docs/skill-config.md).
+
+## 🔄 Compare and update installed skills
+
+The project-level manager inventories deterministic skill hashes, compares the `skills/` tree between Git refs, and previews plugin update commands before applying them:
+
+```bash
+python3 scripts/manage_skills.py list
+python3 scripts/manage_skills.py diff v0.2.0 v0.3.0
+python3 scripts/manage_skills.py update
+python3 scripts/manage_skills.py update --apply
+```
+
+`update` is a dry run unless `--apply` is explicit. Start a new Codex task after updating so the refreshed plugin skills load.
 
 ## 🎨 Make visual direction concrete
 

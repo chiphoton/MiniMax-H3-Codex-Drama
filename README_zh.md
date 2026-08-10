@@ -40,7 +40,7 @@ MiniMax-H3 Drama 是一套 **Codex 优先的视频制作插件**，不只是提�
 
 ### 1. 安装到 Codex
 
-本仓库已按 Codex Plugin 结构打包，包含 8 个技能与固定版本的本地 ComfyUI MCP 连接。请从仓库市场安装完整插件：
+本仓库已按 Codex Plugin 结构打包，包含 9 个技能与固定版本的本地 ComfyUI MCP 连接。请从仓库市场安装完整插件：
 
 ```bash
 codex plugin marketplace add chiphoton/MiniMax-H3-Codex-Drama
@@ -138,7 +138,7 @@ $minimax-h3-adviser
 
 所有控制标记、配置文件、模型覆盖、生成参数和可复制组合，详见[技能参数配置](docs/skill-config.md)。
 
-## 🧰 8 个技能，一套制作系统
+## 🧰 9 个技能，一套制作系统
 
 | | 技能 | 作用 |
 |---:|---|---|
@@ -150,6 +150,22 @@ $minimax-h3-adviser
 | 🎛️ | [`minimax-h3-reference-to-video`](skills/minimax-h3-reference-to-video/SKILL.md) | 绑定身份、设计、风格、动作、运镜、表演或音频参考 |
 | ✂️ | [`minimax-h3-video-editor`](skills/minimax-h3-video-editor/SKILL.md) | 精确描述修改项，并明确必须保持不变的内容 |
 | ⚙️ | [`minimax-h3-comfyui`](skills/minimax-h3-comfyui/SKILL.md) | 准备、验证、提交、监控并取回本地 H3 工作流 |
+| 🪄 | [`qwen-image-edit`](skills/qwen-image-edit/SKILL.md) | 运行固定的一/双参考图 Qwen 一致性编辑工作流 |
+
+Qwen 技能仅支持显式调用。使用 `$qwen-image-edit` 运行编辑，或使用 `$qwen-image-edit help` 查看完整的 [ComfyUI 节点与模型安装指南](skills/qwen-image-edit/references/comfyui-workflow-install.md)。默认情况下，提示词载荷会原样写入工作流。所有布尔方括号控制项均采用[技能参数配置](docs/skill-config.md)中记录的统一别名。
+
+## 🔄 比较并更新已安装技能
+
+项目级管理脚本可以列出确定性的技能哈希、比较两个 Git ref 之间的 `skills/` 变化，并在实际更新插件前预览命令：
+
+```bash
+python3 scripts/manage_skills.py list
+python3 scripts/manage_skills.py diff v0.2.0 v0.3.0
+python3 scripts/manage_skills.py update
+python3 scripts/manage_skills.py update --apply
+```
+
+`update` 默认为 dry run；只有显式添加 `--apply` 才会修改安装。更新后请新建 Codex 任务，以加载刷新后的插件技能。
 
 ## 🎨 把视觉方向变成具体选择
 

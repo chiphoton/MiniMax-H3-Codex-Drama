@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/chiphoton/MiniMax-H3-Codex-Drama/comfy-config.schema.json",
-  "title": "MiniMax H3 ComfyUI configuration",
+  "title": "Shared MiniMax H3 and Qwen Image Edit ComfyUI configuration",
   "type": "object",
   "additionalProperties": false,
   "properties": {
@@ -30,7 +30,9 @@
         "ref2va": { "type": "string" },
         "text_encoder": { "type": "string" },
         "video_vae": { "type": "string" },
-        "audio_vae": { "type": "string" }
+        "audio_vae": { "type": "string" },
+        "qwen_checkpoint": { "type": "string" },
+        "qwen_lora": { "type": "string" }
       }
     },
     "generation": {

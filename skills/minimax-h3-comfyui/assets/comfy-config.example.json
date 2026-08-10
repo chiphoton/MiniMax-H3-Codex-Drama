@@ -13,7 +13,9 @@
     "ref2va": "",
     "text_encoder": "",
     "video_vae": "",
-    "audio_vae": ""
+    "audio_vae": "",
+    "qwen_checkpoint": "",
+    "qwen_lora": ""
   },
   "generation": {
     "width": null,

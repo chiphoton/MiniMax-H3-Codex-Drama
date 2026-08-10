@@ -6,15 +6,17 @@ This is the canonical user-facing reference for MiniMax-H3 Drama controls. It co
 
 ## 1. Prompt-time controls
 
+Every boolean bracket flag uses `[name=<boolean>]`. Names and values are case-insensitive. Accepted true values are `true`, `on`, `yes`, and `1`; accepted false values are `false`, `off`, `no`, and `0`. If a flag is repeated, its last occurrence wins. Any other value is invalid control syntax. The tables use only the canonical `true` and `false` spellings.
+
 ### Control flag summary
 
 | Control | Applies to | Default | Effect |
 |---|---|---|---|
 | `[mode=fast]` | Drama Producer, Adviser | Guided | Make conservative assumptions and continue without questions or approval gates |
-| `[return=true]` or `[return=1]` | ComfyUI execution | `true` | Wait for the exact job to finish, fetch its output, and return the video |
-| `[return=false]` or `[return=0]` | ComfyUI execution | `true` | Submit once and immediately return the `prompt_id`; do not monitor or fetch |
-| `[prompt_enhance=true]` or `[pe=1]` | ComfyUI execution | `false` | Improve the prompt through exactly one matching H3 prompt specialist before submission |
-| `[prompt_enhance=false]` or `[pe=0]` | ComfyUI execution | `false` | Preserve the supplied prompt exactly apart from removing control flags |
+| `[return=true]` | ComfyUI execution | `true` | Wait for the exact job to finish, fetch its output, and return the media |
+| `[return=false]` | ComfyUI execution | `true` | Submit once and immediately return the `prompt_id`; do not monitor or fetch |
+| `[prompt_enhance=true]` or `[pe=true]` | H3 and Qwen execution | `false` | Enable the workflow's applicable prompt-enhancement path |
+| `[prompt_enhance=false]` or `[pe=false]` | H3 and Qwen execution | `false` | Disable enhancement and preserve the supplied prompt apart from control-token removal |
 | `[load_workflow=true]` | ComfyUI execution | `false` | Replace the live ComfyUI canvas with the prepared official workflow |
 | `[load_workflow=false]` | ComfyUI execution | `false` | Stay fully headless; do not initialize or open a browser |
 | `[preview=true]` | ComfyUI execution | `true`* | Show the ComfyUI browser after loading the workflow |
@@ -22,7 +24,9 @@ This is the canonical user-facing reference for MiniMax-H3 Drama controls. It co
 
 `*` Preview is only meaningful when `load_workflow=true`. With workflow loading disabled, preview is forced off.
 
-ComfyUI control flags are case-insensitive and may appear anywhere in the request. They are removed before the final text is sent to MiniMax H3. A ComfyUI control flag also counts as explicit execution intent when used through `minimax-h3-adviser`.
+ComfyUI control flags may appear anywhere in the request. They are removed before the final text is sent to a workflow. A ComfyUI control flag also counts as explicit execution intent when used through `minimax-h3-adviser`.
+
+`qwen-image-edit` is never invoked implicitly. Use `$qwen-image-edit` for a run or `$qwen-image-edit help` for its dependency guide. It shares the connection and runtime controls above and accepts one or two images in attachment order. After removing only the skill invocation and recognized control tokens, it copies the remaining prompt payload directly into the workflow without rewriting, translation, correction, sanitization, classification, or a skill-level safety pass whenever enhancement resolves to false.
 
 Do not invent bracket flags for other settings. State duration, dimensions, seed, profile, voice, captions, and deliverables in normal language, or use the JSON configuration described below.
 
@@ -54,7 +58,7 @@ If a user approves the Drama Producer plan and explicitly says later confirmatio
 
 ### Prompt enhancement
 
-Prompt enhancement is opt-in. With `[prompt_enhance=true]`, the execution skill chooses exactly one specialist:
+Prompt enhancement is opt-in. Any true alias for `prompt_enhance` or `pe` enables it; any false alias disables it. For H3 execution, a true value chooses exactly one specialist:
 
 | Workflow | Specialist |
 |---|---|
@@ -63,6 +67,8 @@ Prompt enhancement is opt-in. With `[prompt_enhance=true]`, the execution skill 
 | R2V / multimodal references | `minimax-h3-reference-to-video` |
 
 Without the flag, a supplied prompt is treated as finished and is not silently rewritten, expanded, translated, or "improved." If the Adviser has already created the final prompt, enhancement is not applied a second time.
+
+For Qwen Image Edit, a true value enables one agent-side enhancement pass. With a false value or no flag, the remaining prompt payload is copied character-for-character into the workflow input. The Qwen graph performs its own downstream prompt enhancement and content filtering.
 
 ### Workflow loading and preview matrix
 
@@ -161,7 +167,9 @@ Start from [`comfy-config.example.json`](../skills/minimax-h3-comfyui/assets/com
     "ref2va": "",
     "text_encoder": "",
     "video_vae": "",
-    "audio_vae": ""
+    "audio_vae": "",
+    "qwen_checkpoint": "",
+    "qwen_lora": ""
   },
   "generation": {
     "width": null,
@@ -208,6 +216,8 @@ Prompt-time flags override these values for the current request.
 | `text_encoder` | All modes | Compatible text encoder |
 | `video_vae` | All modes | MiniMax H3 video VAE |
 | `audio_vae` | All modes | MiniMax H3 audio VAE |
+| `qwen_checkpoint` | Qwen Image Edit | AIO checkpoint loaded through `CheckpointLoaderSimple` |
+| `qwen_lora` | Qwen Image Edit | Consistency LoRA loaded through `LoraLoaderModelOnly` |
 
 Each model is resolved in this order:
 
@@ -218,7 +228,7 @@ Each model is resolved in this order:
 5. Ask when multiple compatible candidates remain.
 6. Report the missing role when none exist.
 
-FL2VA and REF2VA are not interchangeable. The skill never downloads a model, installs a node, or restarts ComfyUI without explicit permission.
+FL2VA and REF2VA are not interchangeable. Qwen Image Edit defaults to the exact filenames pinned in its workflow and does not substitute a similarly named checkpoint or LoRA. The skills never download a model, install a node, or restart ComfyUI without explicit permission.
 
 ### `generation`
 
@@ -316,7 +326,8 @@ As a starting point, specialists recommend 5–15 second H3 clips, `768P` for it
 | The wrong ComfyUI server is contacted | Make `connection.address` and the active MCP target identical |
 | Width/height configuration fails | Supply both; each must be a multiple of 32 |
 | Awaited run times out | The job is still running; keep and resume the returned `prompt_id` |
-| Prompt changed unexpectedly | Use `[prompt_enhance=false]` or `[pe=0]`; enhancement is opt-in by default |
+| MiniMax H3 prompt changed unexpectedly | Use `[prompt_enhance=false]` or `[pe=false]`; H3 enhancement is opt-in by default |
+| Qwen edit prompt changed before submission | Omit the enhancement flag or set either name to a false alias; all other prompt text must pass through unchanged |
 | R2V media is rejected | Stay within 9 images, 3 videos, and 3 standalone audio files |
 | Attached custom workflow is rejected | This version executes only the pinned official T2V/I2V/R2V graphs |
 | A URL reference is not downloaded | Supply a local file; URL downloading and sign-in are intentionally not automatic |

@@ -1,0 +1,34 @@
+{
+  "template": {
+    "ui": "qwen-image-edit.ui.json",
+    "api": "qwen-image-edit.api.json",
+    "source_sha256": "e626141febdc8ec93d78d34e8102bf889359108146c0cfa5e8d9e8f28bed3cc8"
+  },
+  "ui_nodes": {
+    "prompt": 1,
+    "image_1": 4,
+    "image_2": 5,
+    "sampler": 6,
+    "lora": 13,
+    "checkpoint": 17
+  },
+  "api_nodes": {
+    "prompt": "1",
+    "image_1": "4",
+    "image_2": "5",
+    "sampler": "6",
+    "lora": "13",
+    "checkpoint": "17",
+    "generated_preview": "16"
+  },
+  "defaults": {
+    "checkpoint": "Qwen-Rapid-AIO-NSFW-v19.safetensors",
+    "lora": "consistence_edit_v2.safetensors",
+    "lora_strength": 0.8
+  },
+  "dependencies": {
+    "comfy_core": "0.27.0",
+    "qweneditutils": "2.0.7",
+    "rgthree_comfy": "1.0.2606200020"
+  }
+}

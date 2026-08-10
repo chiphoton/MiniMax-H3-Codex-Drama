@@ -1,0 +1,7 @@
+interface:
+  display_name: "Qwen Image Edit"
+  short_description: "Run consistent Qwen image edits in ComfyUI"
+  default_prompt: "Use $qwen-image-edit to edit my attached image while preserving its identity and composition."
+
+policy:
+  allow_implicit_invocation: false

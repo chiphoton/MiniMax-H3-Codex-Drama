@@ -1,7 +1,7 @@
 {
   "name": "minimax-h3-drama",
-  "version": "0.2.0",
-  "description": "Produce profile-driven multi-shot videos in Codex with GPT-Image, MiniMax H3, local ComfyUI, deterministic post-production, and QC.",
+  "version": "0.3.0",
+  "description": "Produce profile-driven MiniMax H3 videos and run consistent Qwen image edits in Codex through local ComfyUI.",
   "author": {
     "name": "chiphoton",
     "url": "https://github.com/chiphoton"
@@ -11,6 +11,7 @@
   "license": "MIT",
   "keywords": [
     "minimax-h3",
+    "qwen-image-edit",
     "comfyui",
     "video-generation",
     "prompt-engineering",
@@ -22,8 +23,8 @@
   "mcpServers": "./.mcp.json",
   "interface": {
     "displayName": "MiniMax-H3 Drama",
-    "shortDescription": "Produce complete profile-driven MiniMax H3 videos",
-    "longDescription": "Plan complete multi-shot videos, create consistent visual assets with GPT-Image, generate each shot through local MiniMax H3 ComfyUI workflows, finish picture and sound, and enforce reproducible technical and visual QC. Distill reusable production profiles from reference videos or use the built-in TikTok short-drama and commercial-ad profiles.",
+    "shortDescription": "Produce H3 videos and consistent Qwen image edits",
+    "longDescription": "Plan complete multi-shot videos, create consistent visual assets, generate each shot through local MiniMax H3 ComfyUI workflows, finish picture and sound, and enforce reproducible technical and visual QC. Also run a pinned Qwen Image Edit consistency workflow with one or two references and reproducible workflow artifacts.",
     "developerName": "chiphoton",
     "category": "Creativity",
     "capabilities": [
@@ -35,7 +36,8 @@
     "defaultPrompt": [
       "Turn my story and references into a finished short video.",
       "Create a product commercial and deliver the final master.",
-      "Distill these reference videos into a reusable profile."
+      "Distill these reference videos into a reusable profile.",
+      "Edit these reference images with Qwen while preserving consistency."
     ],
     "brandColor": "#7C3AED",
     "composerIcon": "./assets/icon.png",

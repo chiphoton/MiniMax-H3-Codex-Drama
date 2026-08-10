@@ -72,7 +72,7 @@ After the selected specialist has produced the finished prompt, load and apply `
 
 Do not treat “generate a prompt,” “write a prompt,” or “recommend a workflow” as execution intent. Do not invoke ComfyUI merely because it is installed or reachable.
 
-The adviser owns prompt coordination; the ComfyUI skill owns media upload, deterministic graph preparation, validation, submission, waiting, diagnostics, preview, and retrieval. Preserve the specialist's final prompt when handing it off. If the request already includes `[prompt_enhance=true]` or `[pe=1]`, do not enhance it a second time.
+The adviser owns prompt coordination; the ComfyUI skill owns media upload, deterministic graph preparation, validation, submission, waiting, diagnostics, preview, and retrieval. Preserve the specialist's final prompt when handing it off. For every ComfyUI boolean flag, interpret `true`, `on`, `yes`, and `1` as true and `false`, `off`, `no`, and `0` as false, case-insensitively; use the last occurrence and reject any other value. If `prompt_enhance` or `pe` resolves to true, do not enhance the specialist's prompt a second time during handoff.
 
 ## Offer language candidates when useful
 

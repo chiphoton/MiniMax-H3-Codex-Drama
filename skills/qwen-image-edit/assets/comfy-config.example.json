@@ -1,0 +1,18 @@
+{
+  "connection": {
+    "address": "localhost:8188"
+  },
+  "runtime": {
+    "return": true,
+    "preview": true,
+    "load_workflow": false,
+    "wait_timeout_minutes": 60
+  },
+  "models": {
+    "qwen_checkpoint": "Qwen-Rapid-AIO-NSFW-v19.safetensors",
+    "qwen_lora": "consistence_edit_v2.safetensors"
+  },
+  "generation": {
+    "seed": null
+  }
+}

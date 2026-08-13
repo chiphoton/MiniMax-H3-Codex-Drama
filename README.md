@@ -1,6 +1,7 @@
 <p align="center">
   <a href="README_zh.md">简体中文</a> ·
-  <a href="docs/skill-config.md">⚙️ Skill configuration</a>
+  <a href="docs/skill-config.md">⚙️ Skill configuration</a> ·
+  <a href="examples/README.md">🎬 Example Gallery</a>
 </p>
 
 <p align="center">
@@ -35,6 +36,8 @@ MiniMax-H3 Drama is a **Codex-first video production plugin**, not just a prompt
 </p>
 
 <p align="center"><em>From a natural-language request and references to a returned video without leaving the Codex task.</em></p>
+
+<p align="center"><strong><a href="examples/README.md">See More Drama Examples in Gallery</a></strong></p>
 
 ## 🚀 Quick start
 

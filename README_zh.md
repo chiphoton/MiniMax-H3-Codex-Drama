@@ -1,6 +1,7 @@
 <p align="center">
   <a href="README.md">English</a> ·
-  <a href="docs/skill-config.md">⚙️ 技能参数配置</a>
+  <a href="docs/skill-config.md">⚙️ 技能参数配置</a> ·
+  <a href="examples/README_zh.md">🎬 示例画廊</a>
 </p>
 
 <p align="center">
@@ -35,6 +36,8 @@ MiniMax-H3 Drama 是一套 **Codex 优先的视频制作插件**，不只是提�
 </p>
 
 <p align="center"><em>从一句自然语言指令和参考素材，到 Codex 任务中直接返回视频。</em></p>
+
+<p align="center"><strong><a href="examples/README_zh.md">在示例画廊查看更多剧情案例</a></strong></p>
 
 ## 🚀 快速开始
 

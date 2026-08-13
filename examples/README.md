@@ -11,14 +11,19 @@ These featured examples show a compact selection of entity sheets, scene designs
 <table>
   <tr>
     <td>
-      <h2>🎭 Modern City Drama · 现代都市剧</h2>
-      <p>A silent workplace miniature set in a high-rise city office. A secretary presents a specified GitHub repository on a projection screen, then her seated boss applauds and gives a clear thumbs-up.</p>
-      <a href="./exp-002-modern-city-drama/README.md">
-        <img src="./exp-002-modern-city-drama/poster.webp" alt="Black title card for Modern City Drama with the Chinese title in white" width="100%">
-      </a>
+      <h2>🎭 Jiangnan Ancient-Style Drama · 江南古风剧</h2>
+      <p>A dialogue-free cinematic miniature set in a rain-soaked Jiangnan garden. Two Tang-inspired figures move from a quiet bridge crossing to a restrained final gaze, shaped by mist, wind, and original guzheng music.</p>
+      <table>
+        <tr>
+          <td width="25%" align="center" valign="top"><strong>🖼️ Poster</strong><br><a href="./exp-001-jiangnan-ancient-drama/README.md"><img src="./exp-001-jiangnan-ancient-drama/poster.webp" alt="Poster for Jiangnan Ancient-Style Drama, showing its Chinese title over a rainy Jiangnan garden" width="100%"></a></td>
+          <td width="25%" align="center" valign="top"><strong>🎭 Entity sheet</strong><br><a href="./exp-001-jiangnan-ancient-drama/README.md"><img src="./exp-001-jiangnan-ancient-drama/entity/tang-beauty-entity-sheet.webp" alt="Entity sheet for the Tang-inspired woman in Jiangnan Ancient-Style Drama" width="100%"></a></td>
+          <td width="25%" align="center" valign="top"><strong>🏙️ Scene</strong><br><a href="./exp-001-jiangnan-ancient-drama/README.md"><img src="./exp-001-jiangnan-ancient-drama/scene/jiangnan-garden-scene.webp" alt="Rainy Jiangnan garden scene with a stone bridge, moon gate, and covered corridor" width="100%"></a></td>
+          <td width="25%" align="center" valign="top"><strong>🧩 Storyboard</strong><br><a href="./exp-001-jiangnan-ancient-drama/README.md"><img src="./exp-001-jiangnan-ancient-drama/storyboard/jiangnan-storyboard.webp" alt="Four-panel storyboard for Jiangnan Ancient-Style Drama" width="100%"></a></td>
+        </tr>
+      </table>
       <p align="center">
-        <a href="./exp-002-modern-city-drama/final.mp4">▶️ Watch the compressed final video</a> ·
-        <a href="./exp-002-modern-city-drama/README.md">✨ View the production story</a>
+        <a href="./exp-001-jiangnan-ancient-drama/final.mp4">▶️ Watch the compressed final video</a> ·
+        <a href="./exp-001-jiangnan-ancient-drama/README.md">✨ View the production story</a>
       </p>
     </td>
   </tr>
@@ -27,14 +32,19 @@ These featured examples show a compact selection of entity sheets, scene designs
 <table>
   <tr>
     <td>
-      <h2>🎭 Jiangnan Ancient-Style Drama · 江南古风剧</h2>
-      <p>A dialogue-free cinematic miniature set in a rain-soaked Jiangnan garden. Two Tang-inspired figures move from a quiet bridge crossing to a restrained final gaze, shaped by mist, wind, and original guzheng music.</p>
-      <a href="./exp-001-jiangnan-ancient-drama/README.md">
-        <img src="./exp-001-jiangnan-ancient-drama/poster.webp" alt="Poster for Jiangnan Ancient-Style Drama, showing its Chinese title over a rainy Jiangnan garden" width="100%">
-      </a>
+      <h2>🎭 Modern City Drama · 现代都市剧</h2>
+      <p>A silent workplace miniature set in a high-rise city office. A secretary presents a specified GitHub repository on a projection screen, then her seated boss applauds and gives a clear thumbs-up.</p>
+      <table>
+        <tr>
+          <td width="25%" align="center" valign="top"><strong>🖼️ Poster</strong><br><a href="./exp-002-modern-city-drama/README.md"><img src="./exp-002-modern-city-drama/poster.webp" alt="Black title card for Modern City Drama with the Chinese title in white" width="100%"></a></td>
+          <td width="25%" align="center" valign="top"><strong>🎭 Entity sheet</strong><br><a href="./exp-002-modern-city-drama/README.md"><img src="./exp-002-modern-city-drama/entity/vera-lin-entity-sheet.webp" alt="Entity sheet for Vera Lin in Modern City Drama" width="100%"></a></td>
+          <td width="25%" align="center" valign="top"><strong>🏙️ Scene</strong><br><a href="./exp-002-modern-city-drama/README.md"><img src="./exp-002-modern-city-drama/scene/highrise-projection-office-scene.webp" alt="High-rise projection office scene for Modern City Drama" width="100%"></a></td>
+          <td width="25%" align="center" valign="top"><strong>🧩 Storyboard</strong><br><a href="./exp-002-modern-city-drama/README.md"><img src="./exp-002-modern-city-drama/storyboard/two-shot-pairs-storyboard.webp" alt="Four-panel presentation and approval storyboard for Modern City Drama" width="100%"></a></td>
+        </tr>
+      </table>
       <p align="center">
-        <a href="./exp-001-jiangnan-ancient-drama/final.mp4">▶️ Watch the compressed final video</a> ·
-        <a href="./exp-001-jiangnan-ancient-drama/README.md">✨ View the production story</a>
+        <a href="./exp-002-modern-city-drama/final.mp4">▶️ Watch the compressed final video</a> ·
+        <a href="./exp-002-modern-city-drama/README.md">✨ View the production story</a>
       </p>
     </td>
   </tr>

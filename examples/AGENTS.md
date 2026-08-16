@@ -54,6 +54,10 @@ examples/
     ├── README_zh.md
     ├── poster.webp
     ├── final.mp4
+    ├── gallery/
+    │   ├── poster-en.webp
+    │   ├── poster-zh.webp
+    │   └── ...
     ├── entity/
     │   └── entity-sheet-01.webp
     ├── scene/
@@ -62,7 +66,7 @@ examples/
         └── storyboard-01.webp
 ```
 
-Every example directory must contain the `entity/`, `scene/`, and `storyboard/` subdirectories. Keep the poster, compressed final video, and detail README at the example root. Each asset subdirectory may contain a few numbered, selected showcase images; if a stage has no published asset, keep its directory with a `.gitkeep` file and explain the omission in the detail README. Do not copy the original output tree, workflow JSON, prompts ledger, logs, rejected takes, raw keyframes, unselected clips, or other intermediate files into `examples/`.
+Every example directory must contain the `entity/`, `scene/`, `storyboard/`, and `gallery/` subdirectories. Keep the poster, compressed final video, and detail README at the example root. Each source-asset subdirectory may contain a few numbered, selected showcase images; `gallery/` contains only the eight small derived preview tiles (four English and four Chinese). If a production stage has no published asset, keep its source-asset directory with a `.gitkeep` file and explain the omission in the detail README. Do not copy the original output tree, workflow JSON, prompts ledger, logs, rejected takes, raw keyframes, unselected clips, or other intermediate files into `examples/`.
 
 ## Gallery README
 
@@ -79,16 +83,19 @@ Every example entry must include:
 5. A clearly labeled final-video preview or link.
 6. A link to the same-language detail page; clicking any of the four images should also open it. English gallery entries link to `./<exp-X>/README.md`, and Chinese gallery entries link to `./<exp-X>/README_zh.md`.
 
-Use relative repository links. Keep cards visually consistent and make the entire gallery readable on GitHub without external scripts, CSS, or hosted assets. Keep one simple outer HTML table per example. Inside its single content cell, render the four previews as sibling `<ruby>` elements in one centered paragraph. Each `<ruby>` must bind one linked image base to one bold `<rt>` caption, and every image must use numeric `width="200"`. Preserve poster/entity/scene/storyboard order. Put the centered video and production-story actions in the paragraph immediately after the preview paragraph.
+Use relative repository links. Keep cards visually consistent and make the entire gallery readable on GitHub without external scripts, CSS, or hosted assets. Keep one simple outer HTML table per example. Inside its single content cell, render the four previews as sibling linked images in one centered paragraph, with numeric `width="200"` on every image. Preserve poster/entity/scene/storyboard order. Put the centered video and production-story actions in the paragraph immediately after the preview paragraph.
 
-The `<ruby>` elements are inline, indivisible caption/image units with legal wrap opportunities between siblings. At the normal GitHub README width, all four 200px units fit as one row (`1×4`). As the viewport narrows they wrap naturally; at a typical portrait-phone content width, only one unit fits per line (`4×1`). Because `<rt>` is structurally attached to its image base, every caption stays centered above the correct image after wrapping. GitHub's Markdown renderer preserves `ruby`, `rt`, `strong`, linked images, and numeric image widths without custom CSS.
+Each gallery preview must be a lightweight, uniformly sized WebP tile stored in the example's `gallery/` directory. Bake the centered category caption into a shallow strip above the source thumbnail so the caption and image are one indivisible visual unit. Produce separate `*-en.webp` and `*-zh.webp` tiles from the same selected source image, translating only the caption. Keep useful translated `alt` and `title` text in the README as the accessible source of truth.
 
-Do not use either known-broken alternative:
+All gallery tiles must have the same pixel dimensions and aspect ratio. A recommended source size is approximately `400×275` pixels, displayed at `width="200"`; preserve the full selected image with letterboxing instead of cropping important visual content. Four sibling 200px linked images fit as one row (`1×4`) at the normal GitHub README width and wrap naturally between images as the viewport narrows. At a typical portrait-phone content width, only one tile fits per line (`4×1`). Because the caption is part of the tile, it always remains centered directly above the correct image.
+
+Do not use these known-broken alternatives:
 
 - Do not combine the four captions into a separate legend; it loses the structural caption-to-image association when widths change.
 - Do not create table columns for the four previews; GitHub tables scroll horizontally instead of reflowing to `4×1`.
 - Do not nest a four-column table inside another card table or use `width="100%"` on the previews; GitHub can expand the nested table far beyond the README content width.
-- Do not replace the `<ruby>/<rt>` structure with custom CSS, flexbox, or grid; GitHub README sanitization does not reliably preserve author CSS.
+- Do not use `<ruby>/<rt>` for gallery captions; GitHub renders `rt` as tiny pronunciation annotation rather than normal caption text.
+- Do not replace the captioned preview tiles with custom CSS, flexbox, or grid; GitHub README sanitization does not reliably preserve author CSS.
 
 If embedded local video is unreliable in the target renderer, the four selected images are the preview and the prominent watch link opens the MP4.
 
@@ -101,10 +108,10 @@ Follow this card skeleton in both languages:
       <h2>🎭 Example title</h2>
       <p>One- or two-sentence brief.</p>
       <p align="center">
-        <ruby><a href="./exp-NNN-short-title/README.md"><img src="./exp-NNN-short-title/poster.webp" alt="Descriptive poster text" title="Poster" width="200"></a><rt><strong>🖼️ Poster</strong></rt></ruby>
-        <ruby><a href="./exp-NNN-short-title/README.md"><img src="./exp-NNN-short-title/entity/entity-sheet-01.webp" alt="Descriptive entity sheet text" title="Entity Sheet" width="200"></a><rt><strong>🎭 Entity Sheet</strong></rt></ruby>
-        <ruby><a href="./exp-NNN-short-title/README.md"><img src="./exp-NNN-short-title/scene/scene-01.webp" alt="Descriptive scene text" title="Scene" width="200"></a><rt><strong>🏙️ Scene</strong></rt></ruby>
-        <ruby><a href="./exp-NNN-short-title/README.md"><img src="./exp-NNN-short-title/storyboard/storyboard-01.webp" alt="Descriptive storyboard text" title="Storyboard" width="200"></a><rt><strong>🧩 Storyboard</strong></rt></ruby>
+        <a href="./exp-NNN-short-title/README.md"><img src="./exp-NNN-short-title/gallery/poster-en.webp" alt="Descriptive poster text" title="Poster" width="200"></a>
+        <a href="./exp-NNN-short-title/README.md"><img src="./exp-NNN-short-title/gallery/entity-en.webp" alt="Descriptive entity sheet text" title="Entity Sheet" width="200"></a>
+        <a href="./exp-NNN-short-title/README.md"><img src="./exp-NNN-short-title/gallery/scene-en.webp" alt="Descriptive scene text" title="Scene" width="200"></a>
+        <a href="./exp-NNN-short-title/README.md"><img src="./exp-NNN-short-title/gallery/storyboard-en.webp" alt="Descriptive storyboard text" title="Storyboard" width="200"></a>
       </p>
       <p align="center">
         <a href="./exp-NNN-short-title/final.mp4">▶️ Watch the compressed final video</a> ·
@@ -115,7 +122,7 @@ Follow this card skeleton in both languages:
 </table>
 ```
 
-For the Chinese card, translate visible copy and alt text, and change both detail links to `README_zh.md`. Keep asset paths unchanged.
+For the Chinese card, translate visible copy, alt text, and title text; change both detail links to `README_zh.md`; and use the matching `*-zh.webp` gallery tiles. Keep the underlying selected source assets unchanged.
 
 Keep entries in publication order and append every new example after the existing cards. Do not insert a new example at the top or reorder published entries unless a maintainer explicitly requests editorial ordering. When adding, renaming, or removing an example, update the gallery in the same change and verify every image, detail-page, and video link.
 
@@ -194,7 +201,7 @@ The English and Chinese detail pages must have the same sections, stage order, f
 
 Repository size is a first-class constraint.
 
-- Publish only representative entity sheets in `entity/`, scene images in `scene/`, storyboard images in `storyboard/`, plus the poster and final video at the example root.
+- Publish only representative entity sheets in `entity/`, scene images in `scene/`, storyboard images in `storyboard/`, the small derived captioned previews in `gallery/`, plus the poster and final video at the example root.
 - Prefer WebP for showcase images; use JPEG only when it is materially smaller at comparable visual quality. Avoid PNG unless transparency or lossless detail is essential.
 - Resize images to the largest dimensions actually useful in a README. As a default, use a long edge around 1600 px and aim for no more than 1 MB per image.
 - Encode final video as broadly playable H.264/AAC MP4 with `yuv420p` pixel format and fast-start metadata. Preserve the intended aspect ratio and keep the smallest bitrate that still represents the work honestly.
@@ -208,7 +215,7 @@ Do not add animated GIF previews by default; they are usually much larger and lo
 
 1. Inspect the source production and choose the smallest set of artifacts that tells the story.
 2. Allocate the next unused stable `exp-NNN-short-title` directory.
-3. Create compressed copies of the selected media and inspect the compressed results.
+3. Create compressed copies of the selected media, generate matching English and Chinese captioned gallery tiles, and inspect the compressed results.
 4. Write both per-example README language versions using the six-message sequence above, including reciprocal language switches.
 5. Append or update the corresponding four-preview responsive gallery card in both `examples/README.md` and `examples/README_zh.md`, including reciprocal language switches.
 6. Open all four README files in a GitHub-compatible renderer when possible. At minimum, verify language switches, same-language navigation, relative paths, content parity, case-sensitive filenames, image dimensions, video playback, file sizes, and mobile-readable layout.

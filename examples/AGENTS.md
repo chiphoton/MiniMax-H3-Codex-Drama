@@ -79,7 +79,18 @@ Every example entry must include:
 5. A clearly labeled final-video preview or link.
 6. A link to the same-language detail page; clicking any of the four images should also open it. English gallery entries link to `./<exp-X>/README.md`, and Chinese gallery entries link to `./<exp-X>/README_zh.md`.
 
-Use relative repository links. Keep cards visually consistent and make the entire gallery readable on GitHub without external scripts, CSS, or hosted assets. Use one full-width outer HTML table per example, matching the first gallery entry. Each card contains, in order: an emoji-led title, the brief, a centered translated category legend, a centered inline flow of four selected images linked to the same-language detail page, then a centered line with the video action and production-story action. Give every preview a numeric `width="200"` rather than a percentage width. Inline images can wrap naturally as the GitHub content area narrows, avoiding the horizontal scrollbar produced by a nested four-column table. Preserve the poster/entity/scene/storyboard source order so the legend stays meaningful after wrapping. If embedded local video is unreliable in the target renderer, the four selected images are the preview and the prominent watch link opens the MP4.
+Use relative repository links. Keep cards visually consistent and make the entire gallery readable on GitHub without external scripts, CSS, or hosted assets. Keep one simple outer HTML table per example. Inside its single content cell, render the four previews as sibling `<ruby>` elements in one centered paragraph. Each `<ruby>` must bind one linked image base to one bold `<rt>` caption, and every image must use numeric `width="200"`. Preserve poster/entity/scene/storyboard order. Put the centered video and production-story actions in the paragraph immediately after the preview paragraph.
+
+The `<ruby>` elements are inline, indivisible caption/image units with legal wrap opportunities between siblings. At the normal GitHub README width, all four 200px units fit as one row (`1×4`). As the viewport narrows they wrap naturally; at a typical portrait-phone content width, only one unit fits per line (`4×1`). Because `<rt>` is structurally attached to its image base, every caption stays centered above the correct image after wrapping. GitHub's Markdown renderer preserves `ruby`, `rt`, `strong`, linked images, and numeric image widths without custom CSS.
+
+Do not use either known-broken alternative:
+
+- Do not combine the four captions into a separate legend; it loses the structural caption-to-image association when widths change.
+- Do not create table columns for the four previews; GitHub tables scroll horizontally instead of reflowing to `4×1`.
+- Do not nest a four-column table inside another card table or use `width="100%"` on the previews; GitHub can expand the nested table far beyond the README content width.
+- Do not replace the `<ruby>/<rt>` structure with custom CSS, flexbox, or grid; GitHub README sanitization does not reliably preserve author CSS.
+
+If embedded local video is unreliable in the target renderer, the four selected images are the preview and the prominent watch link opens the MP4.
 
 Follow this card skeleton in both languages:
 
@@ -89,12 +100,11 @@ Follow this card skeleton in both languages:
     <td>
       <h2>🎭 Example title</h2>
       <p>One- or two-sentence brief.</p>
-      <p align="center"><strong>🖼️ Poster · 🎭 Entity sheet · 🏙️ Scene · 🧩 Storyboard</strong></p>
       <p align="center">
-        <a href="./exp-NNN-short-title/README.md"><img src="./exp-NNN-short-title/poster.webp" alt="Descriptive poster text" title="Poster" width="200"></a>
-        <a href="./exp-NNN-short-title/README.md"><img src="./exp-NNN-short-title/entity/entity-sheet-01.webp" alt="Descriptive entity sheet text" title="Entity sheet" width="200"></a>
-        <a href="./exp-NNN-short-title/README.md"><img src="./exp-NNN-short-title/scene/scene-01.webp" alt="Descriptive scene text" title="Scene" width="200"></a>
-        <a href="./exp-NNN-short-title/README.md"><img src="./exp-NNN-short-title/storyboard/storyboard-01.webp" alt="Descriptive storyboard text" title="Storyboard" width="200"></a>
+        <ruby><a href="./exp-NNN-short-title/README.md"><img src="./exp-NNN-short-title/poster.webp" alt="Descriptive poster text" title="Poster" width="200"></a><rt><strong>🖼️ Poster</strong></rt></ruby>
+        <ruby><a href="./exp-NNN-short-title/README.md"><img src="./exp-NNN-short-title/entity/entity-sheet-01.webp" alt="Descriptive entity sheet text" title="Entity Sheet" width="200"></a><rt><strong>🎭 Entity Sheet</strong></rt></ruby>
+        <ruby><a href="./exp-NNN-short-title/README.md"><img src="./exp-NNN-short-title/scene/scene-01.webp" alt="Descriptive scene text" title="Scene" width="200"></a><rt><strong>🏙️ Scene</strong></rt></ruby>
+        <ruby><a href="./exp-NNN-short-title/README.md"><img src="./exp-NNN-short-title/storyboard/storyboard-01.webp" alt="Descriptive storyboard text" title="Storyboard" width="200"></a><rt><strong>🧩 Storyboard</strong></rt></ruby>
       </p>
       <p align="center">
         <a href="./exp-NNN-short-title/final.mp4">▶️ Watch the compressed final video</a> ·

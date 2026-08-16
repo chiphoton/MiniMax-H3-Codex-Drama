@@ -12,7 +12,7 @@
 
 <p align="center">
   <strong>Turn a story, campaign brief, or reference pack into a finished drama video—inside Codex.</strong><br>
-  👤 Character design · 🏙️ Scene design · 🧩 Storyboards · 🎞️ MiniMax H3 generation · ✂️ Post-production · ✅ QC
+  👤 Character design · 🏙️ Scene design · 🧩 Storyboards · 🎞️ MiniMax H3 video · ✂️ Post-production · ✅ QC
 </p>
 
 <p align="center">

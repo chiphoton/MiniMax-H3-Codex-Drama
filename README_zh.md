@@ -12,7 +12,7 @@
 
 <p align="center">
   <strong>把剧情、广告 brief 或参考素材，直接在 Codex 中制作成完整剧情视频。</strong><br>
-  👤 人物设计 · 🏙️ 场景设计 · 🧩 分镜设计 · 🎞️ MiniMax H3 生成 · ✂️ 后期制作 · ✅ 质量检查
+  👤 人物设计 · 🏙️ 场景设计 · 🧩 分镜设计 · 🎞️ MiniMax H3 视频生成 · ✂️ 后期制作 · ✅ 质量检查
 </p>
 
 <p align="center">

@@ -79,7 +79,7 @@ Every example entry must include:
 5. A clearly labeled final-video preview or link.
 6. A link to the same-language detail page; clicking any of the four images should also open it. English gallery entries link to `./<exp-X>/README.md`, and Chinese gallery entries link to `./<exp-X>/README_zh.md`.
 
-Use relative repository links. Keep cards visually consistent and make the entire gallery readable on GitHub without external scripts, CSS, or hosted assets. Use one full-width outer HTML table per example, matching the first gallery entry. Each card contains, in order: an emoji-led title, the brief, a nested four-column media table, then a centered line with the video action and production-story action. Each media column must be a `width="25%"`, centered, top-aligned `<td>` containing its own bold caption immediately followed by its linked image. Give the image `width="100%"` so it follows its column width. Never place all four captions in a separate legend or paragraph: captions and images must remain in the same cells so each label stays centered above the correct image at every rendered width. Preserve the poster/entity/scene/storyboard column order. If embedded local video is unreliable in the target renderer, the four selected images are the preview and the prominent watch link opens the MP4.
+Use relative repository links. Keep cards visually consistent and make the entire gallery readable on GitHub without external scripts, CSS, or hosted assets. Use one full-width outer HTML table per example, matching the first gallery entry. Each card contains, in order: an emoji-led title, the brief, a centered translated category legend, a centered inline flow of four selected images linked to the same-language detail page, then a centered line with the video action and production-story action. Give every preview a numeric `width="200"` rather than a percentage width. Inline images can wrap naturally as the GitHub content area narrows, avoiding the horizontal scrollbar produced by a nested four-column table. Preserve the poster/entity/scene/storyboard source order so the legend stays meaningful after wrapping. If embedded local video is unreliable in the target renderer, the four selected images are the preview and the prominent watch link opens the MP4.
 
 Follow this card skeleton in both languages:
 
@@ -89,14 +89,13 @@ Follow this card skeleton in both languages:
     <td>
       <h2>🎭 Example title</h2>
       <p>One- or two-sentence brief.</p>
-      <table width="100%">
-        <tr>
-          <td width="25%" align="center" valign="top"><strong>🖼️ Poster</strong><br><br><a href="./exp-NNN-short-title/README.md"><img src="./exp-NNN-short-title/poster.webp" alt="Descriptive poster text" title="Poster" width="100%"></a></td>
-          <td width="25%" align="center" valign="top"><strong>🎭 Entity Sheet</strong><br><br><a href="./exp-NNN-short-title/README.md"><img src="./exp-NNN-short-title/entity/entity-sheet-01.webp" alt="Descriptive entity sheet text" title="Entity Sheet" width="100%"></a></td>
-          <td width="25%" align="center" valign="top"><strong>🏙️ Scene</strong><br><br><a href="./exp-NNN-short-title/README.md"><img src="./exp-NNN-short-title/scene/scene-01.webp" alt="Descriptive scene text" title="Scene" width="100%"></a></td>
-          <td width="25%" align="center" valign="top"><strong>🧩 Storyboard</strong><br><br><a href="./exp-NNN-short-title/README.md"><img src="./exp-NNN-short-title/storyboard/storyboard-01.webp" alt="Descriptive storyboard text" title="Storyboard" width="100%"></a></td>
-        </tr>
-      </table>
+      <p align="center"><strong>🖼️ Poster · 🎭 Entity sheet · 🏙️ Scene · 🧩 Storyboard</strong></p>
+      <p align="center">
+        <a href="./exp-NNN-short-title/README.md"><img src="./exp-NNN-short-title/poster.webp" alt="Descriptive poster text" title="Poster" width="200"></a>
+        <a href="./exp-NNN-short-title/README.md"><img src="./exp-NNN-short-title/entity/entity-sheet-01.webp" alt="Descriptive entity sheet text" title="Entity sheet" width="200"></a>
+        <a href="./exp-NNN-short-title/README.md"><img src="./exp-NNN-short-title/scene/scene-01.webp" alt="Descriptive scene text" title="Scene" width="200"></a>
+        <a href="./exp-NNN-short-title/README.md"><img src="./exp-NNN-short-title/storyboard/storyboard-01.webp" alt="Descriptive storyboard text" title="Storyboard" width="200"></a>
+      </p>
       <p align="center">
         <a href="./exp-NNN-short-title/final.mp4">▶️ Watch the compressed final video</a> ·
         <a href="./exp-NNN-short-title/README.md">✨ View the production story</a>

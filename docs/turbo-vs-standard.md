@@ -52,7 +52,7 @@ Both conditioning images were generated specifically for this benchmark with Ope
 
 | I2V literal opening frame | R2V identity reference |
 |---|---|
-| ![Clockwork fox in the rainy courtyard](turbo-vs-standard/inputs/i2v-first-frame.png) | ![Clockwork fox studio identity reference](turbo-vs-standard/inputs/r2v-reference.png) |
+| ![Clockwork fox in the rainy courtyard](turbo-vs-standard/assets/i2v-first-frame.png) | ![Clockwork fox studio identity reference](turbo-vs-standard/assets/r2v-reference.png) |
 
 The same text prompt was used for all six runs ([prompt.txt](turbo-vs-standard/prompt.txt)):
 

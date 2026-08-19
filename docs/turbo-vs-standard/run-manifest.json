@@ -44,8 +44,8 @@
     }
   },
   "inputs": {
-    "i2v_first_frame": "inputs/i2v-first-frame.png",
-    "r2v_reference": "inputs/r2v-reference.png",
+    "i2v_first_frame": "assets/i2v-first-frame.png",
+    "r2v_reference": "assets/r2v-reference.png",
     "generation_method": "OpenAI GPT Image via the built-in image generation tool",
     "generation_prompts_are_recorded_in": "../turbo-vs-standard.md"
   },

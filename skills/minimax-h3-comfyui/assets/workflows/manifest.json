@@ -1,4 +1,5 @@
 {
+  "default_variant": "turbo",
   "source": {
     "repository": "https://github.com/Comfy-Org/workflow_templates",
     "commit": "ac26fb9893f97d7cfeb8122d2e5865f282e8f659",
@@ -8,10 +9,49 @@
       "r2v.ui.json": "099d24eda6263854818975c7209db6f29ebfd0339936c928f12293d5ab029ffb"
     }
   },
+  "turbo_source": {
+    "repository": "https://github.com/Larryvrh/ComfyUI-MiniMax-H3-Turbo",
+    "commit": "4274783a23afcfdbea3b4876cb79effd6c510785",
+    "node_pack": "comfyui-minimax-h3-turbo",
+    "node_version": "1.2.3",
+    "default_lora": "minimax_h3_turbo_v4_step600_ema.safetensors",
+    "default_steps": 6,
+    "recommended_steps": [4, 8],
+    "files": {
+      "t2v-turbo.ui.json": "867dcd620d0622b593ad21b20d068beb2046980f64feb42a3e6e9399efbbfaa5",
+      "t2v-turbo.api.json": "77630c9965dfb0fe3e5fadb1b03b062ba0930ffa82a723037c64edcc4d6075c3",
+      "i2v-turbo.ui.json": "5de03ee9de177b566348c9492ccf0a804c2e0456b7e064981d2e5f9c60ecb3b9",
+      "i2v-turbo.api.json": "f2eb511ccdf87bf1cf867ee457c474f3a5ab7377e54af79da71ca47bd9b667fc",
+      "r2v-turbo.ui.json": "8cbe5973b4e6ee366e30da73cee779442e1ffe2a0f0a765117c6c20ab15b5152",
+      "r2v-turbo.api.json": "b3eb1a458d272c0e04ee3f788d68c474b43b8a716776d4eb18007c682b65049a"
+    }
+  },
   "modes": {
     "t2v": {
-      "ui": "t2v.ui.json",
-      "api": "t2v.api.json",
+      "variants": {
+        "standard": {
+          "ui": "t2v.ui.json",
+          "api": "t2v.api.json",
+          "sampling": {
+            "sampler": ["17", "sampler_name"],
+            "scheduler": ["9", "scheduler"],
+            "steps": ["9", "steps"],
+            "denoise": ["9", "denoise"]
+          }
+        },
+        "turbo": {
+          "ui": "t2v-turbo.ui.json",
+          "api": "t2v-turbo.api.json",
+          "models": {
+            "turbo_lora": ["134", "lora_name"]
+          },
+          "sampling": {
+            "scheduler": ["9", "scheduler"],
+            "steps": ["9", "steps"],
+            "denoise": ["9", "denoise"]
+          }
+        }
+      },
       "prompt": ["104", "prompt"],
       "size": ["104", "width", "height"],
       "length": ["104", "length"],
@@ -22,17 +62,33 @@
         "video_vae": ["11", "vae_name"],
         "audio_vae": ["24", "vae_name"]
       },
-      "output": ["92", "filename_prefix"],
-      "sampling": {
-        "sampler": ["17", "sampler_name"],
-        "scheduler": ["9", "scheduler"],
-        "steps": ["9", "steps"],
-        "denoise": ["9", "denoise"]
-      }
+      "output": ["92", "filename_prefix"]
     },
     "i2v": {
-      "ui": "i2v.ui.json",
-      "api": "i2v.api.json",
+      "variants": {
+        "standard": {
+          "ui": "i2v.ui.json",
+          "api": "i2v.api.json",
+          "sampling": {
+            "sampler": ["17", "sampler_name"],
+            "scheduler": ["9", "scheduler"],
+            "steps": ["9", "steps"],
+            "denoise": ["9", "denoise"]
+          }
+        },
+        "turbo": {
+          "ui": "i2v-turbo.ui.json",
+          "api": "i2v-turbo.api.json",
+          "models": {
+            "turbo_lora": ["134", "lora_name"]
+          },
+          "sampling": {
+            "scheduler": ["9", "scheduler"],
+            "steps": ["9", "steps"],
+            "denoise": ["9", "denoise"]
+          }
+        }
+      },
       "prompt": ["104", "prompt"],
       "size": ["104", "width", "height"],
       "length": ["104", "length"],
@@ -43,17 +99,35 @@
         "video_vae": ["11", "vae_name"],
         "audio_vae": ["24", "vae_name"]
       },
-      "output": ["92", "filename_prefix"],
-      "sampling": {
-        "sampler": ["17", "sampler_name"],
-        "scheduler": ["9", "scheduler"],
-        "steps": ["9", "steps"],
-        "denoise": ["9", "denoise"]
-      }
+      "output": ["92", "filename_prefix"]
     },
     "r2v": {
-      "ui": "r2v.ui.json",
-      "api": "r2v.api.json",
+      "variants": {
+        "standard": {
+          "ui": "r2v.ui.json",
+          "api": "r2v.api.json",
+          "sampling": {
+            "sampler": ["123", "sampler_name"],
+            "scheduler": ["124", "scheduler"],
+            "steps": ["124", "steps"],
+            "denoise": ["124", "denoise"],
+            "ref_image_size": ["136", "ref_image_size"]
+          }
+        },
+        "turbo": {
+          "ui": "r2v-turbo.ui.json",
+          "api": "r2v-turbo.api.json",
+          "models": {
+            "turbo_lora": ["141", "lora_name"]
+          },
+          "sampling": {
+            "scheduler": ["124", "scheduler"],
+            "steps": ["124", "steps"],
+            "denoise": ["124", "denoise"],
+            "ref_image_size": ["136", "ref_image_size"]
+          }
+        }
+      },
       "prompt": ["136", "prompt"],
       "size": ["136", "width", "height"],
       "length": ["136", "length"],
@@ -64,14 +138,7 @@
         "video_vae": ["119", "vae_name"],
         "audio_vae": ["120", "vae_name"]
       },
-      "output": ["92", "filename_prefix"],
-      "sampling": {
-        "sampler": ["123", "sampler_name"],
-        "scheduler": ["124", "scheduler"],
-        "steps": ["124", "steps"],
-        "denoise": ["124", "denoise"],
-        "ref_image_size": ["136", "ref_image_size"]
-      }
+      "output": ["92", "filename_prefix"]
     }
   }
 }

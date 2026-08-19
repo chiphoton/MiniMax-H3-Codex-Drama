@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="560" viewBox="0 0 1000 560" role="img" aria-labelledby="title desc">
+  <title id="title">MiniMax H3 standard versus Turbo end-to-end runtime</title>
+  <desc id="desc">Grouped bars compare standard 20-step and Turbo 6-step runtime for text-to-video, image-to-video, and reference-to-video. Turbo is about 2.2 times faster in every mode.</desc>
+  <rect width="1000" height="560" fill="#ffffff"/>
+  <text x="500" y="34" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" font-weight="700" fill="#18212f">End-to-end runtime by workflow</text>
+  <text x="500" y="60" text-anchor="middle" font-family="Arial, sans-serif" font-size="15" fill="#566273">Cold-cache runs · identical seed, prompt, inputs, and shared settings</text>
+
+  <g font-family="Arial, sans-serif" font-size="13" fill="#566273">
+    <line x1="90" y1="440" x2="960" y2="440" stroke="#d9dee7"/>
+    <line x1="90" y1="375.7" x2="960" y2="375.7" stroke="#e9edf2"/>
+    <line x1="90" y1="311.4" x2="960" y2="311.4" stroke="#e9edf2"/>
+    <line x1="90" y1="247.1" x2="960" y2="247.1" stroke="#e9edf2"/>
+    <line x1="90" y1="182.9" x2="960" y2="182.9" stroke="#e9edf2"/>
+    <line x1="90" y1="118.6" x2="960" y2="118.6" stroke="#e9edf2"/>
+    <text x="78" y="445" text-anchor="end">0</text>
+    <text x="78" y="380.7" text-anchor="end">50</text>
+    <text x="78" y="316.4" text-anchor="end">100</text>
+    <text x="78" y="252.1" text-anchor="end">150</text>
+    <text x="78" y="187.9" text-anchor="end">200</text>
+    <text x="78" y="123.6" text-anchor="end">250</text>
+  </g>
+
+  <line x1="90" y1="80" x2="90" y2="440" stroke="#8a94a3"/>
+  <line x1="90" y1="440" x2="960" y2="440" stroke="#8a94a3"/>
+  <text x="24" y="260" transform="rotate(-90 24 260)" text-anchor="middle" font-family="Arial, sans-serif" font-size="15" fill="#18212f">Wall time (seconds)</text>
+
+  <g>
+    <rect x="170" y="114.6" width="70" height="325.4" rx="3" fill="#5875a4"/>
+    <rect x="250" y="293.9" width="70" height="146.1" rx="3" fill="#f28e2b"/>
+    <rect x="430" y="105.9" width="70" height="334.1" rx="3" fill="#5875a4"/>
+    <rect x="510" y="287.2" width="70" height="152.8" rx="3" fill="#f28e2b"/>
+    <rect x="690" y="104.4" width="70" height="335.6" rx="3" fill="#5875a4"/>
+    <rect x="770" y="286.6" width="70" height="153.4" rx="3" fill="#f28e2b"/>
+  </g>
+
+  <g font-family="Arial, sans-serif" font-size="14" font-weight="700" fill="#18212f" text-anchor="middle">
+    <text x="205" y="104">253.1 s</text>
+    <text x="285" y="283">113.7 s</text>
+    <text x="465" y="95">259.8 s</text>
+    <text x="545" y="276">118.9 s</text>
+    <text x="725" y="94">261.0 s</text>
+    <text x="805" y="276">119.3 s</text>
+  </g>
+
+  <g font-family="Arial, sans-serif" text-anchor="middle">
+    <text x="245" y="469" font-size="17" font-weight="700" fill="#18212f">T2V</text>
+    <text x="245" y="492" font-size="14" fill="#f28e2b">2.23× faster</text>
+    <text x="505" y="469" font-size="17" font-weight="700" fill="#18212f">I2V</text>
+    <text x="505" y="492" font-size="14" fill="#f28e2b">2.19× faster</text>
+    <text x="765" y="469" font-size="17" font-weight="700" fill="#18212f">R2V</text>
+    <text x="765" y="492" font-size="14" fill="#f28e2b">2.19× faster</text>
+  </g>
+
+  <g font-family="Arial, sans-serif" font-size="14" fill="#18212f">
+    <rect x="357" y="524" width="16" height="16" rx="2" fill="#5875a4"/>
+    <text x="381" y="537">Standard · 20 steps</text>
+    <rect x="547" y="524" width="16" height="16" rx="2" fill="#f28e2b"/>
+    <text x="571" y="537">Turbo · 6 steps</text>
+  </g>
+</svg>

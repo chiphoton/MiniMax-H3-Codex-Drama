@@ -1,7 +1,8 @@
 <p align="center">
   <a href="README_zh.md">简体中文</a> ·
   <a href="docs/skill-config.md">⚙️ Skill configuration</a> ·
-  <a href="examples/README.md">🎬 Example Gallery</a>
+  <a href="examples/README.md">🎬 Example Gallery</a> ·
+  <a href="docs/turbo-vs-standard.md">⚡ Turbo Report</a>
 </p>
 
 <p align="center">
@@ -29,6 +30,7 @@ MiniMax-H3 Drama is a **Codex-first video production plugin**, not just a prompt
 | 🧬 **Cross-shot consistency** | Identity, wardrobe, product geometry, locations, props, screen direction, light, and audio are tracked explicitly |
 | 🧠 **Profile-driven direction** | Built-in short-drama and commercial grammar, plus reusable profiles distilled from your own reference videos |
 | 🛠️ **Local, deterministic finishing** | Official H3 workflows through local ComfyUI; versioned FFmpeg editing, mixing, captions, exports, and QC |
+| ⚡ **Turbo by default** | T2V, I2V, and R2V use the MiniMax H3 Turbo LoRA at 6 steps; `[turbo=false]` keeps the original 20-step graphs available |
 | 🔁 **Resumable by design** | Every prompt, input hash, workflow, `prompt_id`, take, selection, assumption, and artifact stays in the project ledger |
 
 <p align="center">
@@ -66,6 +68,8 @@ The skills-only route does not install the bundled ComfyUI MCP connection.
 ### 2. Prepare the local runtime
 
 Install Node.js and npm: the plugin launches the pinned `comfyui-mcp@0.49.3` package through `npx`, and its first launch may need network access to populate the npm cache. Run ComfyUI at `http://localhost:8188` with compatible MiniMax H3 models and nodes. Install FFmpeg/FFprobe for assembly and QC.
+
+Turbo is enabled by default. Install [ComfyUI-MiniMax-H3-Turbo](https://github.com/Larryvrh/ComfyUI-MiniMax-H3-Turbo) through ComfyUI-Manager (search **MiniMax-H3 Turbo**) or under `ComfyUI/custom_nodes/`, restart ComfyUI, and place `minimax_h3_turbo_v4_step600_ema.safetensors` from the [Turbo LoRA repository](https://huggingface.co/larryvrh/MiniMax-H3-Turbo-Lora) in `ComfyUI/models/loras/`. Use `[turbo=false]` for the original workflow when those Turbo dependencies are intentionally unavailable.
 
 The plugin checks the environment before expensive work; it does **not** silently download models, install ComfyUI nodes, start services, or restart ComfyUI.
 
@@ -165,7 +169,7 @@ The project-level manager inventories deterministic skill hashes, compares the `
 
 ```bash
 python3 scripts/manage_skills.py list
-python3 scripts/manage_skills.py diff v0.2.0 v0.3.0
+python3 scripts/manage_skills.py diff v0.3.0 v0.4.0
 python3 scripts/manage_skills.py update
 python3 scripts/manage_skills.py update --apply
 ```

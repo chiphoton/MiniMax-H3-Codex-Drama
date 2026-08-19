@@ -1,7 +1,8 @@
 <p align="center">
   <a href="README.md">English</a> ·
   <a href="docs/skill-config.md">⚙️ 技能参数配置</a> ·
-  <a href="examples/README_zh.md">🎬 示例画廊</a>
+  <a href="examples/README_zh.md">🎬 示例画廊</a> ·
+  <a href="docs/turbo-vs-standard.md">⚡ Turbo 对比报告</a>
 </p>
 
 <p align="center">
@@ -29,6 +30,7 @@ MiniMax-H3 Drama 是一套 **Codex 优先的视频制作插件**，不只是提�
 | 🧬 **跨镜头一致性** | 显式追踪人物身份、服装、产品结构、场景、道具、轴线、光线和声音 |
 | 🧠 **Profile 驱动的导演方法** | 内置短剧与广告语法，也能从你自己的参考视频中提炼可复用 Profile |
 | 🛠️ **本地、确定性的后期** | 本地 ComfyUI 官方 H3 工作流；版本化 FFmpeg 剪辑、混音、字幕、导出和 QC |
+| ⚡ **默认启用 Turbo** | T2V、I2V 与 R2V 默认使用 6 步 MiniMax H3 Turbo LoRA；`[turbo=false]` 可切回原始 20 步工作流 |
 | 🔁 **天然支持断点续作** | 提示词、输入哈希、工作流、`prompt_id`、take、选片、假设和资产全部进入工程账本 |
 
 <p align="center">
@@ -66,6 +68,8 @@ npx skills add chiphoton/MiniMax-H3-Codex-Drama --all -g -a codex -y
 ### 2. 准备本地运行环境
 
 请先安装 Node.js 和 npm：插件会通过 `npx` 启动固定版本的 `comfyui-mcp@0.49.3`，首次启动时可能需要联网以填充 npm 缓存。在 `http://localhost:8188` 运行 ComfyUI，并准备兼容的 MiniMax H3 模型与节点；安装 FFmpeg/FFprobe 以完成剪辑和 QC。
+
+Turbo 默认启用。请通过 ComfyUI-Manager 搜索并安装 **MiniMax-H3 Turbo**，或把 [ComfyUI-MiniMax-H3-Turbo](https://github.com/Larryvrh/ComfyUI-MiniMax-H3-Turbo) 放入 `ComfyUI/custom_nodes/`，随后重启 ComfyUI；再从 [Turbo LoRA 仓库](https://huggingface.co/larryvrh/MiniMax-H3-Turbo-Lora) 下载 `minimax_h3_turbo_v4_step600_ema.safetensors` 并放入 `ComfyUI/models/loras/`。如果有意不安装这些依赖，可使用 `[turbo=false]` 切回原始工作流。
 
 插件会在昂贵操作之前做环境检查，但**不会**静默下载模型、安装 ComfyUI 节点、启动服务或重启 ComfyUI。
 
@@ -163,7 +167,7 @@ Qwen 技能仅支持显式调用。使用 `$qwen-image-edit` 运行编辑，或�
 
 ```bash
 python3 scripts/manage_skills.py list
-python3 scripts/manage_skills.py diff v0.2.0 v0.3.0
+python3 scripts/manage_skills.py diff v0.3.0 v0.4.0
 python3 scripts/manage_skills.py update
 python3 scripts/manage_skills.py update --apply
 ```

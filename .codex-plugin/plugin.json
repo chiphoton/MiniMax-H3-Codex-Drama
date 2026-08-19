@@ -1,6 +1,6 @@
 {
   "name": "minimax-h3-drama",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Produce profile-driven MiniMax H3 videos and run consistent Qwen image edits in Codex through local ComfyUI.",
   "author": {
     "name": "chiphoton",

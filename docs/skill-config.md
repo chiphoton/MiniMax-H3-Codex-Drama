@@ -21,6 +21,8 @@ Every boolean bracket flag uses `[name=<boolean>]`. Names and values are case-in
 | `[load_workflow=false]` | ComfyUI execution | `false` | Stay fully headless; do not initialize or open a browser |
 | `[preview=true]` | ComfyUI execution | `true`* | Show the ComfyUI browser after loading the workflow |
 | `[preview=false]` | ComfyUI execution | `true`* | Keep any browser work in the background after loading the workflow |
+| `[turbo=true]` | MiniMax H3 ComfyUI | `true` | Use the 6-step Turbo LoRA workflow |
+| `[turbo=false]` | MiniMax H3 ComfyUI | `true` | Use the original 20-step workflow; `off`, `no`, and `0` are equivalent |
 
 `*` Preview is only meaningful when `load_workflow=true`. With workflow loading disabled, preview is forced off.
 
@@ -105,6 +107,13 @@ Generate this attached reference-led shot.
 [prompt_enhance=true] [load_workflow=true] [preview=true]
 ```
 
+Use the original non-Turbo sampler:
+
+```text
+$minimax-h3-comfyui
+Run this prompt with the original workflow. [turbo=false]
+```
+
 Run a complete production without approval pauses:
 
 ```text
@@ -160,6 +169,7 @@ Start from [`comfy-config.example.json`](../skills/minimax-h3-comfyui/assets/com
     "return": true,
     "preview": true,
     "load_workflow": false,
+    "turbo": true,
     "wait_timeout_minutes": 60
   },
   "models": {
@@ -168,6 +178,7 @@ Start from [`comfy-config.example.json`](../skills/minimax-h3-comfyui/assets/com
     "text_encoder": "",
     "video_vae": "",
     "audio_vae": "",
+    "turbo_lora": "",
     "qwen_checkpoint": "",
     "qwen_lora": ""
   },
@@ -203,6 +214,7 @@ The plugin's bundled [`.mcp.json`](../.mcp.json) also targets `http://localhost:
 | `return` | boolean | `true` | Wait and fetch (`true`) or submit and return the ID (`false`) |
 | `preview` | boolean | `true` | Present the browser after loading; forced off when `load_workflow=false` |
 | `load_workflow` | boolean | `false` | Load the prepared UI graph onto the live canvas |
+| `turbo` | boolean | `true` | Select the 6-step Turbo workflow; prompt-time `[turbo=...]` wins |
 | `wait_timeout_minutes` | number, `0 < n ≤ 60` | `60` | Maximum awaited monitoring time; timeout does not cancel the job |
 
 Prompt-time flags override these values for the current request.
@@ -216,6 +228,7 @@ Prompt-time flags override these values for the current request.
 | `text_encoder` | All modes | Compatible text encoder |
 | `video_vae` | All modes | MiniMax H3 video VAE |
 | `audio_vae` | All modes | MiniMax H3 audio VAE |
+| `turbo_lora` | Turbo T2V, I2V, R2V | MiniMax H3 Turbo LoRA; pinned default is `minimax_h3_turbo_v4_step600_ema.safetensors` |
 | `qwen_checkpoint` | Qwen Image Edit | AIO checkpoint loaded through `CheckpointLoaderSimple` |
 | `qwen_lora` | Qwen Image Edit | Consistency LoRA loaded through `LoraLoaderModelOnly` |
 
@@ -228,7 +241,7 @@ Each model is resolved in this order:
 5. Ask when multiple compatible candidates remain.
 6. Report the missing role when none exist.
 
-FL2VA and REF2VA are not interchangeable. Qwen Image Edit defaults to the exact filenames pinned in its workflow and does not substitute a similarly named checkpoint or LoRA. The skills never download a model, install a node, or restart ComfyUI without explicit permission.
+FL2VA and REF2VA are not interchangeable. Turbo additionally requires the [`ComfyUI-MiniMax-H3-Turbo`](https://github.com/Larryvrh/ComfyUI-MiniMax-H3-Turbo) node pack and places its LoRA under `ComfyUI/models/loras/`. Install the node pack through ComfyUI-Manager by searching for **MiniMax-H3 Turbo**, or clone it into `ComfyUI/custom_nodes/`, then restart ComfyUI. The skills report missing dependencies but never download a model, install a node, or restart ComfyUI without explicit permission. Qwen Image Edit defaults to the exact filenames pinned in its workflow and does not substitute a similarly named checkpoint or LoRA.
 
 ### `generation`
 
@@ -239,13 +252,13 @@ FL2VA and REF2VA are not interchangeable. Qwen Image Edit defaults to the exact 
 | `duration_seconds` | number, `0 < n ≤ 15` | All | Requested clip duration; converted to H3's `17k+5` frame grid at 24 fps |
 | `seed` | integer ≥ 0 | All | Noise seed |
 | `filename_prefix` | string | All | ComfyUI output filename prefix |
-| `sampler` | string | All | Named sampler available in the connected workflow/runtime |
-| `scheduler` | string | All | Named scheduler available in the connected workflow/runtime |
-| `steps` | integer ≥ 1 | All | Sampling step count |
+| `sampler` | string | Standard H3 only | Named sampler; Turbo pins `MiniMaxH3TurboSampler` |
+| `scheduler` | string | All | Named scheduler; Turbo requires `simple` |
+| `steps` | integer ≥ 1 | All | Sampling step count; Turbo requires 4–8 and defaults to 6 |
 | `denoise` | number, `0 ≤ n ≤ 1` | All | Denoise strength |
 | `ref_image_size` | `""`, `"match"`, or `"max"` | R2V only | Reference-image sizing policy; empty preserves the official default |
 
-If a field remains empty or `null`, the pinned workflow value is preserved. Width and height are atomic: setting only one is a configuration error.
+If a field remains empty or `null`, the selected pinned workflow value is preserved. Width and height are atomic: setting only one is a configuration error. A sampler override, a non-`simple` scheduler, or a step count outside 4–8 is rejected while Turbo is active; use `[turbo=false]` to configure the original workflow instead.
 
 Explicit settings can also be stated naturally for one request:
 
@@ -267,7 +280,9 @@ The execution skill selects a bundled official workflow from the role of the sup
 
 For R2V, a reference video's frames and its paired audio are connected together. Give every reference a bounded role and state what it must not influence.
 
-The plugin executes bundled `.api.json` graphs and retains untouched `.ui.json` graphs for provenance and canvas loading. Arbitrary attached workflow JSON is rejected in this version.
+The plugin executes bundled `.api.json` graphs and retains each matching `.ui.json` graph for provenance and canvas loading. Arbitrary attached workflow JSON is rejected in this version.
+
+Each route has two pinned variants. Turbo is selected by default and inserts the Turbo LoRA and custom sampler at 6 steps. The original 20-step variant remains available with `[turbo=false]`, `[turbo=off]`, `[turbo=no]`, or another false alias.
 
 ## 5. Production profiles
 
@@ -329,7 +344,10 @@ As a starting point, specialists recommend 5–15 second H3 clips, `768P` for it
 | MiniMax H3 prompt changed unexpectedly | Use `[prompt_enhance=false]` or `[pe=false]`; H3 enhancement is opt-in by default |
 | Qwen edit prompt changed before submission | Omit the enhancement flag or set either name to a false alias; all other prompt text must pass through unchanged |
 | R2V media is rejected | Stay within 9 images, 3 videos, and 3 standalone audio files |
-| Attached custom workflow is rejected | This version executes only the pinned official T2V/I2V/R2V graphs |
+| Turbo validation reports missing nodes | Install/update **MiniMax-H3 Turbo** through ComfyUI-Manager, restart ComfyUI, or explicitly use `[turbo=false]` |
+| Turbo validation reports a missing LoRA | Put `minimax_h3_turbo_v4_step600_ema.safetensors` under `ComfyUI/models/loras/` or configure an installed compatible Turbo LoRA |
+| Turbo rejects sampler/scheduler/steps | Keep its custom sampler, `simple` scheduler, and 4–8 steps, or explicitly use `[turbo=false]` |
+| Attached custom workflow is rejected | This version executes only the bundled standard and Turbo T2V/I2V/R2V graphs |
 | A URL reference is not downloaded | Supply a local file; URL downloading and sign-in are intentionally not automatic |
 
 For runtime procedure and diagnostic behavior, see [`references/runtime.md`](../skills/minimax-h3-comfyui/references/runtime.md).

@@ -1,0 +1,187 @@
+{
+  "benchmark": "MiniMax H3 Standard vs Turbo",
+  "date": "2026-08-19",
+  "timezone": "Asia/Singapore",
+  "comfyui": {
+    "endpoint": "http://localhost:8188",
+    "version": "0.30.0",
+    "operating_system": "linux",
+    "python": "3.13.14",
+    "pytorch": "2.12.1+cu130",
+    "device": "cuda:0 NVIDIA GB10 : cudaMallocAsync",
+    "system_memory_bytes": 130595856384,
+    "cold_cache_per_run": true,
+    "cold_cache_method": "POST /free with unload_models=true and free_memory=true",
+    "queue_was_empty_before_benchmark": true
+  },
+  "shared_configuration": {
+    "seed": 314159265,
+    "width": 768,
+    "height": 448,
+    "frames": 124,
+    "fps": 24,
+    "video_duration_seconds": 5.166667,
+    "scheduler": "simple",
+    "denoise": 1.0,
+    "prompt_path": "prompt.txt",
+    "text_encoder": "qwen3vl_32b_minimax_h3_int8_convrot.safetensors",
+    "fl2va_model": "minimax_h3_fl2va_int8_convrot.safetensors",
+    "ref2va_model": "minimax_h3_ref2va_int8_convrot.safetensors",
+    "video_vae": "minimax_h3_video_vae_fp16.safetensors",
+    "audio_vae": "minimax_h3_audio_vae_fp32.safetensors"
+  },
+  "variants": {
+    "standard": {
+      "steps": 20,
+      "sampler": "res_multistep"
+    },
+    "turbo": {
+      "steps": 6,
+      "sampler": "MiniMaxH3TurboSampler",
+      "lora": "minimax_h3_turbo_v4_step600_ema.safetensors",
+      "lora_strength": 1.0,
+      "low_vram": false
+    }
+  },
+  "inputs": {
+    "i2v_first_frame": "inputs/i2v-first-frame.png",
+    "r2v_reference": "inputs/r2v-reference.png",
+    "generation_method": "OpenAI GPT Image via the built-in image generation tool",
+    "generation_prompts_are_recorded_in": "../turbo-vs-standard.md"
+  },
+  "documentation_encoding": {
+    "container": "mp4",
+    "video_codec": "libx264",
+    "video_crf": 28,
+    "video_preset": "medium",
+    "pixel_format": "yuv420p",
+    "audio_codec": "aac",
+    "audio_target_bitrate": "96k",
+    "faststart": true
+  },
+  "objective_checks": {
+    "scene_change_detector": "FFmpeg select=gt(scene,0.30)",
+    "detected_hard_cuts_per_output": 0,
+    "i2v_raw_first_frame_ssim": {
+      "standard": 0.824462,
+      "turbo": 0.821456,
+      "absolute_difference": 0.003006
+    }
+  },
+  "runs": [
+    {
+      "mode": "t2v",
+      "variant": "standard",
+      "workflow": "workflows/t2v-standard.api.json",
+      "prompt_id": "a0321c3a-3c80-4c1c-bc64-3826b2769337",
+      "start_timestamp_ms": 1787144663499,
+      "success_timestamp_ms": 1787144916575,
+      "total_seconds": 253.076,
+      "sampler_seconds": 207,
+      "remote_output": "turbo-vs-standard/t2v-standard_00001_.mp4",
+      "local_output": "videos/t2v-standard.mp4",
+      "raw_bytes": 758122,
+      "documentation_bytes": 378839,
+      "documentation_bitrate_bps": 584628,
+      "integrated_loudness_lufs": -22.1,
+      "true_peak_dbfs": -7.2
+    },
+    {
+      "mode": "t2v",
+      "variant": "turbo",
+      "workflow": "workflows/t2v-turbo.api.json",
+      "prompt_id": "3db0763f-b22c-4c34-9f23-7ec780d42be6",
+      "start_timestamp_ms": 1787145562206,
+      "success_timestamp_ms": 1787145675856,
+      "total_seconds": 113.650,
+      "sampler_seconds": 77,
+      "remote_output": "turbo-vs-standard/t2v-turbo_00001_.mp4",
+      "local_output": "videos/t2v-turbo.mp4",
+      "raw_bytes": 993494,
+      "documentation_bytes": 490533,
+      "documentation_bitrate_bps": 756995,
+      "integrated_loudness_lufs": -17.8,
+      "true_peak_dbfs": -5.8
+    },
+    {
+      "mode": "i2v",
+      "variant": "standard",
+      "workflow": "workflows/i2v-standard.api.json",
+      "prompt_id": "4ab5ee80-229e-47e8-9804-e7db946def90",
+      "start_timestamp_ms": 1787145852099,
+      "success_timestamp_ms": 1787146111925,
+      "total_seconds": 259.826,
+      "sampler_seconds": 214,
+      "remote_output": "turbo-vs-standard/i2v-standard_00001_.mp4",
+      "local_output": "videos/i2v-standard.mp4",
+      "raw_bytes": 794679,
+      "documentation_bytes": 392433,
+      "documentation_bitrate_bps": 605606,
+      "integrated_loudness_lufs": -32.8,
+      "true_peak_dbfs": -9.1,
+      "raw_first_frame_ssim_to_input": 0.824462
+    },
+    {
+      "mode": "i2v",
+      "variant": "turbo",
+      "workflow": "workflows/i2v-turbo.api.json",
+      "prompt_id": "f7cc4700-e3eb-4230-8d62-56412c7ed6eb",
+      "start_timestamp_ms": 1787146269709,
+      "success_timestamp_ms": 1787146388561,
+      "total_seconds": 118.852,
+      "sampler_seconds": 82,
+      "remote_output": "turbo-vs-standard/i2v-turbo_00001_.mp4",
+      "local_output": "videos/i2v-turbo.mp4",
+      "raw_bytes": 1037181,
+      "documentation_bytes": 498248,
+      "documentation_bitrate_bps": 768901,
+      "integrated_loudness_lufs": -31.1,
+      "true_peak_dbfs": -7.8,
+      "raw_first_frame_ssim_to_input": 0.821456
+    },
+    {
+      "mode": "r2v",
+      "variant": "standard",
+      "workflow": "workflows/r2v-standard.api.json",
+      "prompt_id": "2225cdfe-5edd-4b63-a232-1fb8900720a3",
+      "start_timestamp_ms": 1787146700708,
+      "success_timestamp_ms": 1787146961703,
+      "total_seconds": 260.995,
+      "sampler_seconds": 215,
+      "remote_output": "turbo-vs-standard/r2v-standard_00001_.mp4",
+      "local_output": "videos/r2v-standard.mp4",
+      "raw_bytes": 769956,
+      "documentation_bytes": 370870,
+      "documentation_bitrate_bps": 572330,
+      "integrated_loudness_lufs": -33.7,
+      "true_peak_dbfs": -8.7
+    },
+    {
+      "mode": "r2v",
+      "variant": "turbo",
+      "workflow": "workflows/r2v-turbo.api.json",
+      "prompt_id": "68d70b42-166e-4ff1-9259-45d10cf4a5a3",
+      "start_timestamp_ms": 1787147049259,
+      "success_timestamp_ms": 1787147168605,
+      "total_seconds": 119.346,
+      "sampler_seconds": 82,
+      "remote_output": "turbo-vs-standard/r2v-turbo_00001_.mp4",
+      "local_output": "videos/r2v-turbo.mp4",
+      "raw_bytes": 1035192,
+      "documentation_bytes": 509808,
+      "documentation_bitrate_bps": 786740,
+      "integrated_loudness_lufs": -31.1,
+      "true_peak_dbfs": -7.5
+    }
+  ],
+  "aggregate": {
+    "standard_total_seconds": 773.897,
+    "turbo_total_seconds": 351.848,
+    "seconds_saved": 422.049,
+    "wall_time_speedup": 2.1995,
+    "wall_time_reduction_percent": 54.54,
+    "standard_sampler_seconds": 636,
+    "turbo_sampler_seconds": 241,
+    "sampler_speedup": 2.6390
+  }
+}

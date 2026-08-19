@@ -6,6 +6,7 @@
     "return": true,
     "preview": true,
     "load_workflow": false,
+    "turbo": true,
     "wait_timeout_minutes": 60
   },
   "models": {
@@ -14,6 +15,7 @@
     "text_encoder": "",
     "video_vae": "",
     "audio_vae": "",
+    "turbo_lora": "",
     "qwen_checkpoint": "",
     "qwen_lora": ""
   },

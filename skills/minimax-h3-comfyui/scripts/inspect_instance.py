@@ -20,6 +20,7 @@ PINNED = {
     "text_encoder": "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
     "video_vae": "minimax_h3_video_vae_fp16.safetensors",
     "audio_vae": "minimax_h3_audio_vae_fp32.safetensors",
+    "turbo_lora": "minimax_h3_turbo_v4_step600_ema.safetensors",
 }
 
 MODEL_NODE = {
@@ -28,7 +29,10 @@ MODEL_NODE = {
     "text_encoder": ("CLIPLoader", "clip_name"),
     "video_vae": ("VAELoader", "vae_name"),
     "audio_vae": ("VAELoader", "vae_name"),
+    "turbo_lora": ("MiniMaxH3TurboLoRA", "lora_name"),
 }
+
+TURBO_NODES = ("MiniMaxH3TurboLoRA", "MiniMaxH3TurboSampler")
 
 
 def get_json(address: str, route: str) -> dict[str, Any]:
@@ -53,6 +57,7 @@ def compatible(kind: str, name: str) -> bool:
         "text_encoder": ("minimax_h3", "qwen3vl"),
         "video_vae": ("minimax_h3", "video", "vae"),
         "audio_vae": ("minimax_h3", "audio", "vae"),
+        "turbo_lora": ("minimax", "h3", "turbo"),
     }[kind]
     return all(term in folded for term in terms)
 
@@ -78,27 +83,60 @@ def select(kind: str, available: list[str], preferred: str | None) -> dict[str, 
     }
 
 
+def required_models(mode: str, turbo: bool) -> list[str]:
+    result = ["ref2va" if mode == "r2v" else "fl2va", "text_encoder", "video_vae", "audio_vae"]
+    if turbo:
+        result.append("turbo_lora")
+    return result
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--mode", required=True, choices=("t2v", "i2v", "r2v"))
     parser.add_argument("--project-root", type=Path, default=Path.cwd())
+    parser.add_argument("--turbo", action=argparse.BooleanOptionalAction, default=None)
     args = parser.parse_args()
     try:
         config, config_files = load_config(args.project_root.resolve())
+        turbo = args.turbo if args.turbo is not None else config["runtime"]["turbo"]
         address = normalize_address(config["connection"]["address"])
         stats = get_json(address, "/system_stats")
         nodes = ["UNETLoader", "CLIPLoader", "VAELoader"]
+        if turbo:
+            nodes.extend(TURBO_NODES)
         object_info: dict[str, Any] = {}
+        missing_nodes: list[str] = []
         for node in nodes:
-            object_info.update(get_json(address, f"/object_info/{node}"))
-        required = ["ref2va" if args.mode == "r2v" else "fl2va", "text_encoder", "video_vae", "audio_vae"]
+            try:
+                payload = get_json(address, f"/object_info/{node}")
+            except urllib.error.HTTPError as exc:
+                if exc.code != 404:
+                    raise
+                missing_nodes.append(node)
+                continue
+            if node not in payload:
+                missing_nodes.append(node)
+                continue
+            object_info.update(payload)
+        if missing_nodes:
+            print(json.dumps({
+                "reachable": True,
+                "address": address,
+                "turbo": turbo,
+                "config_files": config_files,
+                "system": stats.get("system", {}),
+                "missing_nodes": missing_nodes,
+                "error": "Required ComfyUI node(s) are not installed",
+            }, indent=2))
+            return 4
         resolved: dict[str, Any] = {}
-        for kind in required:
+        for kind in required_models(args.mode, turbo):
             node, field = MODEL_NODE[kind]
             resolved[kind] = select(kind, choices(object_info, node, field), config["models"].get(kind))
         result = {
             "reachable": True,
             "address": address,
+            "turbo": turbo,
             "config_files": config_files,
             "system": stats.get("system", {}),
             "models": resolved,

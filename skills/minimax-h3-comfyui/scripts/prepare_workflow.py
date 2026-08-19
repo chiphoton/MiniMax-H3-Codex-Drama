@@ -20,13 +20,14 @@ PROJECT_CONFIG = Path(".config") / "comfy-config.json"
 
 CONFIG_KEYS = {
     "connection": {"address"},
-    "runtime": {"return", "preview", "load_workflow", "wait_timeout_minutes"},
+    "runtime": {"return", "preview", "load_workflow", "turbo", "wait_timeout_minutes"},
     "models": {
         "fl2va",
         "ref2va",
         "text_encoder",
         "video_vae",
         "audio_vae",
+        "turbo_lora",
         "qwen_checkpoint",
         "qwen_lora",
     },
@@ -90,6 +91,7 @@ def load_config(project_root: Path) -> tuple[dict[str, Any], list[str]]:
             "return": True,
             "preview": True,
             "load_workflow": False,
+            "turbo": True,
             "wait_timeout_minutes": 60,
         },
         "models": {},
@@ -108,7 +110,7 @@ def load_config(project_root: Path) -> tuple[dict[str, Any], list[str]]:
 
 def validate_values(config: dict[str, Any]) -> None:
     runtime = config["runtime"]
-    for name in ("return", "preview", "load_workflow"):
+    for name in ("return", "preview", "load_workflow", "turbo"):
         if not isinstance(runtime[name], bool):
             raise ConfigError(f"runtime.{name} must be true or false")
     timeout = runtime["wait_timeout_minutes"]
@@ -246,8 +248,12 @@ def apply_media(workflow: dict[str, Any], args: argparse.Namespace) -> None:
 def build_workflow(args: argparse.Namespace) -> tuple[dict[str, Any], dict[str, Any]]:
     manifest = read_json(MANIFEST_PATH)
     mode = manifest["modes"][args.mode]
-    workflow = read_json(WORKFLOW_DIR / mode["api"])
     config, config_files = load_config(args.project_root.resolve())
+    explicit_turbo = getattr(args, "turbo", None)
+    turbo = explicit_turbo if explicit_turbo is not None else config["runtime"]["turbo"]
+    variant_name = "turbo" if turbo else "standard"
+    variant = mode["variants"][variant_name]
+    workflow = read_json(WORKFLOW_DIR / variant["api"])
     generation = config["generation"]
 
     prompt = args.prompt
@@ -285,13 +291,26 @@ def build_workflow(args: argparse.Namespace) -> tuple[dict[str, Any], dict[str, 
         set_input(workflow, mode["output"], filename_prefix)
 
     models = dict(config["models"])
-    for model_name in mode["models"]:
+    model_fields = {**mode["models"], **variant.get("models", {})}
+    for model_name, location in model_fields.items():
         explicit = getattr(args, model_name, None)
         selected = explicit or models.get(model_name)
         if selected:
-            set_input(workflow, mode["models"][model_name], selected)
+            set_input(workflow, location, selected)
 
-    sampling = mode["sampling"]
+    if turbo:
+        sampler = args.sampler if args.sampler is not None else generation.get("sampler")
+        if sampler not in (None, ""):
+            raise ConfigError("Turbo uses MiniMaxH3TurboSampler; set turbo=false to override sampler")
+        scheduler = args.scheduler if args.scheduler is not None else generation.get("scheduler")
+        if scheduler not in (None, "", "simple"):
+            raise ConfigError("Turbo requires the 'simple' scheduler")
+        steps = args.steps if args.steps is not None else generation.get("steps")
+        minimum, maximum = manifest["turbo_source"]["recommended_steps"]
+        if steps is not None and not minimum <= steps <= maximum:
+            raise ConfigError(f"Turbo steps must be between {minimum} and {maximum}")
+
+    sampling = variant["sampling"]
     for setting in ("sampler", "scheduler", "steps", "denoise", "ref_image_size"):
         if setting not in sampling:
             continue
@@ -303,10 +322,13 @@ def build_workflow(args: argparse.Namespace) -> tuple[dict[str, Any], dict[str, 
     apply_media(workflow, args)
     metadata = {
         "mode": args.mode,
-        "workflow": str(WORKFLOW_DIR / mode["api"]),
+        "variant": variant_name,
+        "turbo": turbo,
+        "workflow": str(WORKFLOW_DIR / variant["api"]),
+        "ui_workflow": str(WORKFLOW_DIR / variant["ui"]),
         "config_files": config_files,
         "address": normalize_address(config["connection"]["address"]),
-        "runtime": effective_runtime(config["runtime"]),
+        "runtime": effective_runtime({**config["runtime"], "turbo": turbo}),
     }
     return workflow, metadata
 
@@ -319,6 +341,7 @@ def parser() -> argparse.ArgumentParser:
     prompt_group.add_argument("--prompt-file", type=Path)
     result.add_argument("--project-root", type=Path, default=Path.cwd())
     result.add_argument("--output", type=Path, required=True)
+    result.add_argument("--turbo", action=argparse.BooleanOptionalAction, default=None)
     result.add_argument("--width", type=int)
     result.add_argument("--height", type=int)
     result.add_argument("--duration", type=float)
@@ -329,6 +352,7 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--text-encoder", dest="text_encoder")
     result.add_argument("--video-vae", dest="video_vae")
     result.add_argument("--audio-vae", dest="audio_vae")
+    result.add_argument("--turbo-lora", dest="turbo_lora")
     result.add_argument("--sampler")
     result.add_argument("--scheduler")
     result.add_argument("--steps", type=int)

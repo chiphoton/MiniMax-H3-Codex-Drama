@@ -20,6 +20,7 @@ def arguments(root: Path, output: Path, mode: str = "t2v", **changes: object) ->
         "prompt_file": None,
         "project_root": root,
         "output": output,
+        "turbo": None,
         "width": None,
         "height": None,
         "duration": None,
@@ -30,6 +31,7 @@ def arguments(root: Path, output: Path, mode: str = "t2v", **changes: object) ->
         "text_encoder": None,
         "video_vae": None,
         "audio_vae": None,
+        "turbo_lora": None,
         "sampler": None,
         "scheduler": None,
         "steps": None,
@@ -46,11 +48,13 @@ def arguments(root: Path, output: Path, mode: str = "t2v", **changes: object) ->
 
 
 class PrepareWorkflowTests(unittest.TestCase):
-    def test_pinned_ui_assets_match_manifest_hashes(self) -> None:
+    def test_pinned_assets_match_manifest_hashes(self) -> None:
         manifest = prepare.read_json(prepare.MANIFEST_PATH)
-        for filename, expected in manifest["source"]["files"].items():
-            actual = hashlib.sha256((prepare.WORKFLOW_DIR / filename).read_bytes()).hexdigest()
-            self.assertEqual(actual, expected, filename)
+        self.assertEqual(manifest["default_variant"], "turbo")
+        for source in ("source", "turbo_source"):
+            for filename, expected in manifest[source]["files"].items():
+                actual = hashlib.sha256((prepare.WORKFLOW_DIR / filename).read_bytes()).hexdigest()
+                self.assertEqual(actual, expected, filename)
 
     def test_duration_snaps_to_h3_grid(self) -> None:
         self.assertEqual(prepare.duration_to_length(5), 124)
@@ -94,14 +98,146 @@ class PrepareWorkflowTests(unittest.TestCase):
                 fl2va="installed-fl2va.safetensors",
             )
             with mock.patch.object(prepare, "USER_CONFIG", root / "missing.json"):
-                workflow, _ = prepare.build_workflow(args)
+                workflow, metadata = prepare.build_workflow(args)
             self.assertEqual(workflow["104"]["inputs"]["prompt"], "A controlled test")
             self.assertEqual(workflow["104"]["inputs"]["width"], 1280)
             self.assertEqual(workflow["104"]["inputs"]["height"], 736)
             self.assertEqual(workflow["104"]["inputs"]["length"], 243)
             self.assertEqual(workflow["15"]["inputs"]["noise_seed"], 42)
             self.assertEqual(workflow["6"]["inputs"]["unet_name"], "installed-fl2va.safetensors")
+            self.assertEqual(workflow["9"]["inputs"]["steps"], 6)
+            self.assertEqual(workflow["17"]["class_type"], "MiniMaxH3TurboSampler")
+            self.assertEqual(metadata["variant"], "turbo")
+
+    def test_turbo_is_default_for_every_mode(self) -> None:
+        cases = {
+            "t2v": ("9", "17", "16", "134", "6"),
+            "i2v": ("9", "17", "16", "134", "6"),
+            "r2v": ("124", "123", "126", "141", "127"),
+        }
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            with mock.patch.object(prepare, "USER_CONFIG", root / "missing.json"):
+                for mode, (scheduler, sampler, guider, lora, loader) in cases.items():
+                    with self.subTest(mode=mode):
+                        workflow, metadata = prepare.build_workflow(
+                            arguments(root, root / f"{mode}.json", mode=mode)
+                        )
+                        self.assertTrue(metadata["turbo"])
+                        self.assertEqual(metadata["variant"], "turbo")
+                        self.assertEqual(workflow[sampler]["class_type"], "MiniMaxH3TurboSampler")
+                        self.assertEqual(workflow[scheduler]["inputs"]["steps"], 6)
+                        self.assertEqual(workflow[scheduler]["inputs"]["model"], [lora, 0])
+                        self.assertEqual(workflow[guider]["inputs"]["model"], [lora, 0])
+                        self.assertEqual(workflow[lora]["class_type"], "MiniMaxH3TurboLoRA")
+                        self.assertEqual(workflow[lora]["inputs"]["model"], [loader, 0])
+                        self.assertEqual(workflow[lora]["inputs"]["strength"], 1.0)
+                        self.assertFalse(workflow[lora]["inputs"]["low_vram"])
+
+    def test_no_turbo_selects_original_workflow(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            args = arguments(root, root / "out.json", turbo=False)
+            with mock.patch.object(prepare, "USER_CONFIG", root / "missing.json"):
+                workflow, metadata = prepare.build_workflow(args)
+            self.assertFalse(metadata["turbo"])
+            self.assertEqual(metadata["variant"], "standard")
+            self.assertEqual(workflow["17"]["class_type"], "KSamplerSelect")
             self.assertEqual(workflow["9"]["inputs"]["steps"], 20)
+            self.assertNotIn("134", workflow)
+
+    def test_explicit_turbo_flag_overrides_project_config(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            project = root / ".config" / "comfy-config.json"
+            project.parent.mkdir()
+            project.write_text(json.dumps({"runtime": {"turbo": False}}))
+            with mock.patch.object(prepare, "USER_CONFIG", root / "missing.json"):
+                _, configured = prepare.build_workflow(arguments(root, root / "off.json"))
+                _, explicit = prepare.build_workflow(
+                    arguments(root, root / "on.json", turbo=True)
+                )
+            self.assertEqual(configured["variant"], "standard")
+            self.assertEqual(explicit["variant"], "turbo")
+
+    def test_turbo_lora_can_be_overridden(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            args = arguments(root, root / "out.json", turbo_lora="chosen-turbo.safetensors")
+            with mock.patch.object(prepare, "USER_CONFIG", root / "missing.json"):
+                workflow, _ = prepare.build_workflow(args)
+            self.assertEqual(workflow["134"]["inputs"]["lora_name"], "chosen-turbo.safetensors")
+
+    def test_turbo_steps_must_stay_in_recommended_range(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            with mock.patch.object(prepare, "USER_CONFIG", root / "missing.json"):
+                for steps in (3, 9):
+                    with self.subTest(steps=steps):
+                        with self.assertRaisesRegex(prepare.ConfigError, "between 4 and 8"):
+                            prepare.build_workflow(arguments(root, root / "out.json", steps=steps))
+
+                for steps in (4, 8):
+                    with self.subTest(steps=steps):
+                        workflow, _ = prepare.build_workflow(
+                            arguments(root, root / "out.json", steps=steps)
+                        )
+                        self.assertEqual(workflow["9"]["inputs"]["steps"], steps)
+
+    def test_turbo_rejects_standard_sampler_override(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            with mock.patch.object(prepare, "USER_CONFIG", root / "missing.json"):
+                with self.assertRaisesRegex(prepare.ConfigError, "Turbo uses"):
+                    prepare.build_workflow(
+                        arguments(root, root / "out.json", sampler="res_multistep")
+                    )
+
+                with self.assertRaisesRegex(prepare.ConfigError, "simple"):
+                    prepare.build_workflow(
+                        arguments(root, root / "out.json", scheduler="beta")
+                    )
+
+    def test_turbo_ui_assets_contain_matching_nodes_and_defaults(self) -> None:
+        manifest = prepare.read_json(prepare.MANIFEST_PATH)
+        for mode_name, mode in manifest["modes"].items():
+            workflow = prepare.read_json(prepare.WORKFLOW_DIR / mode["variants"]["turbo"]["ui"])
+            graph = workflow.get("definitions", {}).get("subgraphs", [workflow])[0]
+            nodes = graph["nodes"]
+            types = [node["type"] for node in nodes]
+            scheduler = next(node for node in nodes if node["type"] == "BasicScheduler")
+            with self.subTest(mode=mode_name):
+                self.assertIn("MiniMaxH3TurboLoRA", types)
+                self.assertIn("MiniMaxH3TurboSampler", types)
+                self.assertNotIn("KSamplerSelect", types)
+                self.assertEqual(scheduler["widgets_values"][:2], ["simple", 6])
+                node_ids = {node["id"] for node in nodes}
+                link_ids = [
+                    link["id"] if isinstance(link, dict) else link[0]
+                    for link in graph["links"]
+                ]
+                self.assertEqual(len(link_ids), len(set(link_ids)))
+                for link in graph["links"]:
+                    origin = link["origin_id"] if isinstance(link, dict) else link[1]
+                    target = link["target_id"] if isinstance(link, dict) else link[3]
+                    self.assertTrue(origin in node_ids or origin < 0)
+                    self.assertTrue(target in node_ids or target < 0)
+
+    def test_every_api_variant_has_closed_node_links(self) -> None:
+        manifest = prepare.read_json(prepare.MANIFEST_PATH)
+        for mode_name, mode in manifest["modes"].items():
+            for variant_name, variant in mode["variants"].items():
+                workflow = prepare.read_json(prepare.WORKFLOW_DIR / variant["api"])
+                with self.subTest(mode=mode_name, variant=variant_name):
+                    for node in workflow.values():
+                        for value in node["inputs"].values():
+                            if (
+                                isinstance(value, list)
+                                and len(value) == 2
+                                and isinstance(value[0], str)
+                                and isinstance(value[1], int)
+                            ):
+                                self.assertIn(value[0], workflow)
 
     def test_r2v_media_replaces_template_references(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

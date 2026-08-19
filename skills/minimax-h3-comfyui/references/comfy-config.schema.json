@@ -19,6 +19,7 @@
         "return": { "type": "boolean", "default": true },
         "preview": { "type": "boolean", "default": true },
         "load_workflow": { "type": "boolean", "default": false },
+        "turbo": { "type": "boolean", "default": true },
         "wait_timeout_minutes": { "type": "number", "exclusiveMinimum": 0, "maximum": 60, "default": 60 }
       }
     },
@@ -31,6 +32,7 @@
         "text_encoder": { "type": "string" },
         "video_vae": { "type": "string" },
         "audio_vae": { "type": "string" },
+        "turbo_lora": { "type": "string" },
         "qwen_checkpoint": { "type": "string" },
         "qwen_lora": { "type": "string" }
       }

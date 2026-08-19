@@ -126,7 +126,15 @@ def comfyui_report(url: str, timeout: float) -> dict[str, Any]:
 
 def workflow_report() -> dict[str, Any]:
     manifest = COMFY_SKILL / "assets" / "workflows" / "manifest.json"
-    required = ["t2v.api.json", "i2v.api.json", "r2v.api.json", "manifest.json"]
+    required = [
+        "t2v.api.json",
+        "i2v.api.json",
+        "r2v.api.json",
+        "t2v-turbo.api.json",
+        "i2v-turbo.api.json",
+        "r2v-turbo.api.json",
+        "manifest.json",
+    ]
     base = manifest.parent
     files = {name: (base / name).is_file() for name in required}
     return {

@@ -45,15 +45,16 @@ MiniMax-H3 Drama is a **Codex-first video production plugin**, not just a prompt
 
 ### 1. Install for Codex
 
-This repository is packaged as a Codex Plugin with nine skills and a pinned local ComfyUI MCP connection. Install the complete bundle from its repository marketplace:
+This repository publishes two Codex plugins from one marketplace: the nine-skill production plugin with a pinned local ComfyUI MCP connection, plus the separate `h3style` companion containing the official MiniMax-H3 skills. Install the production plugin, then add the official style companion when you want those workflows:
 
 ```bash
 codex plugin marketplace add chiphoton/MiniMax-H3-Codex-Drama
 codex plugin add minimax-h3-drama@chiphoton
+codex plugin add h3style@chiphoton
 codex plugin list --json
 ```
 
-Start a new Codex task after installation so the bundled skills and MCP server are loaded.
+Start a new Codex task after installation so the bundled skills and MCP server are loaded. `h3style` remains a separate plugin namespace, so official skills appear as `h3style:<skill>` and can be refreshed without merging upstream files into the production plugin.
 
 For a skills-only installation:
 
@@ -62,6 +63,8 @@ npx skills add chiphoton/MiniMax-H3-Codex-Drama --all -g -a codex -y
 ```
 
 The skills-only route does not install the bundled ComfyUI MCP connection.
+
+The skills-only CLI does not preserve plugin namespaces and may discover the nested `h3style` adapters as ordinary skills. Use the Codex plugin installation above when the `h3style:<skill>` separation matters.
 
 > Migrating from `0.1.x`? Remove the old `minimax-h3-prompt-skills` plugin before installing `minimax-h3-drama` so the specialist skills are not registered twice.
 
@@ -162,6 +165,24 @@ See [skill configuration](docs/skill-config.md) for every control flag, configur
 | 🪄 | [`qwen-image-edit`](skills/qwen-image-edit/SKILL.md) | Run the pinned one/two-reference Qwen consistency-edit workflow |
 
 The Qwen skill is explicit-only. Invoke `$qwen-image-edit` to run an edit, or `$qwen-image-edit help` to show its complete [ComfyUI dependency and model guide](skills/qwen-image-edit/references/comfyui-workflow-install.md). Its default path copies the prompt payload directly into the workflow. All boolean bracket controls share the aliases documented in [skill configuration](docs/skill-config.md).
+
+## 🎨 Official H3 style companion
+
+The separate [`h3style`](plugins/h3style/README.md) plugin pins all nine folders from the official [MiniMax-H3 skills repository](https://github.com/MiniMax-AI/MiniMax-H3/tree/main/skills). Every official source stays unchanged under `references/official/`; thin Codex entrypoints remove unsupported metadata from `h3-prompt-writing` and translate Hub-only operations in the other eight workflows into planning, prompts, approval gates, and handoff to this production plugin.
+
+| Official skill | Best fit |
+|---|---|
+| [`h3style:h3-prompt-writing`](plugins/h3style/skills/h3-prompt-writing/SKILL.md) | Official structured prompts for base/keyframe and Ref2VA modes |
+| [`h3style:3d-animation-short-generator`](plugins/h3style/skills/3d-animation-short-generator/SKILL.md) | Complete stylized 3D animated narratives |
+| [`h3style:minimalist-product-ad-generator`](plugins/h3style/skills/minimalist-product-ad-generator/SKILL.md) | Premium minimalist product films |
+| [`h3style:papercraft-stop-motion-explainer`](plugins/h3style/skills/papercraft-stop-motion-explainer/SKILL.md) | Layered papercraft and miniature explainers |
+| [`h3style:brand-promo-video-generator`](plugins/h3style/skills/brand-promo-video-generator/SKILL.md) | Verified brand, app, website, shop, and launch promos |
+| [`h3style:music-video-subtitle-generator`](plugins/h3style/skills/music-video-subtitle-generator/SKILL.md) | Beat- and lyric-driven MVs with spatial typography |
+| [`h3style:co-op-game-intro-generator`](plugins/h3style/skills/co-op-game-intro-generator/SKILL.md) | Two-player game menus and opening animations |
+| [`h3style:paper-collage-explainer-generator`](plugins/h3style/skills/paper-collage-explainer-generator/SKILL.md) | Halftone editorial paper-collage explainers |
+| [`h3style:handdrawn-live-video-generator`](plugins/h3style/skills/handdrawn-live-video-generator/SKILL.md) | Live action fused with rough glowing hand-drawn motion |
+
+The adviser selects at most one matching official style overlay, then still chooses the correct local H3 input route. Refresh the pinned official snapshot with `python3 plugins/h3style/scripts/sync_upstream.py`; provenance and per-skill hashes are recorded in [`upstream-lock.json`](plugins/h3style/upstream-lock.json).
 
 ## 🔄 Compare and update installed skills
 

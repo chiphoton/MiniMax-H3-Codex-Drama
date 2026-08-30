@@ -45,15 +45,16 @@ MiniMax-H3 Drama 是一套 **Codex 优先的视频制作插件**，不只是提�
 
 ### 1. 安装到 Codex
 
-本仓库已按 Codex Plugin 结构打包，包含 9 个技能与固定版本的本地 ComfyUI MCP 连接。请从仓库市场安装完整插件：
+本仓库在同一个市场中提供两个 Codex 插件：包含 9 个技能与固定版本本地 ComfyUI MCP 连接的制作插件，以及独立的官方技能伴侣 `h3style`。先安装制作插件；如需官方工作流，再安装风格伴侣：
 
 ```bash
 codex plugin marketplace add chiphoton/MiniMax-H3-Codex-Drama
 codex plugin add minimax-h3-drama@chiphoton
+codex plugin add h3style@chiphoton
 codex plugin list --json
 ```
 
-安装完成后请新建一个 Codex 任务，以加载插件内的技能和 MCP 服务。
+安装完成后请新建一个 Codex 任务，以加载插件内的技能和 MCP 服务。`h3style` 使用独立插件命名空间，因此官方技能会显示为 `h3style:<skill>`，上游更新不会混入制作插件的技能目录。
 
 如果只需安装技能：
 
@@ -62,6 +63,8 @@ npx skills add chiphoton/MiniMax-H3-Codex-Drama --all -g -a codex -y
 ```
 
 仅安装技能不会安装插件内置的 ComfyUI MCP 连接。
+
+仅技能 CLI 不会保留插件命名空间，并可能把嵌套的 `h3style` 适配器识别为普通技能。如果需要保持 `h3style:<skill>` 的独立命名空间，请使用上面的 Codex 插件安装方式。
 
 > 从 `0.1.x` 升级？请先移除旧的 `minimax-h3-prompt-skills` 插件，再安装 `minimax-h3-drama`，避免同名专业技能被注册两次。
 
@@ -160,6 +163,24 @@ $minimax-h3-adviser
 | 🪄 | [`qwen-image-edit`](skills/qwen-image-edit/SKILL.md) | 运行固定的一/双参考图 Qwen 一致性编辑工作流 |
 
 Qwen 技能仅支持显式调用。使用 `$qwen-image-edit` 运行编辑，或使用 `$qwen-image-edit help` 查看完整的 [ComfyUI 节点与模型安装指南](skills/qwen-image-edit/references/comfyui-workflow-install.md)。默认情况下，提示词载荷会原样写入工作流。所有布尔方括号控制项均采用[技能参数配置](docs/skill-config.md)中记录的统一别名。
+
+## 🎨 官方 H3 风格伴侣
+
+独立的 [`h3style`](plugins/h3style/README.md) 插件固定收录官方 [MiniMax-H3 技能仓库](https://github.com/MiniMax-AI/MiniMax-H3/tree/main/skills)中的 9 个技能目录。所有官方原文都原样保存在 `references/official/`；轻量 Codex 入口会移除 `h3-prompt-writing` 中不受支持的元数据，并把其余 8 个工作流的 Hub 专属操作转换为规划、提示词、确认门和制作插件交接。
+
+| 官方技能 | 适用场景 |
+|---|---|
+| [`h3style:h3-prompt-writing`](plugins/h3style/skills/h3-prompt-writing/SKILL.md) | Base/关键帧与 Ref2VA 的官方结构化提示词 |
+| [`h3style:3d-animation-short-generator`](plugins/h3style/skills/3d-animation-short-generator/SKILL.md) | 完整风格化 3D 动画叙事 |
+| [`h3style:minimalist-product-ad-generator`](plugins/h3style/skills/minimalist-product-ad-generator/SKILL.md) | 高级极简产品广告 |
+| [`h3style:papercraft-stop-motion-explainer`](plugins/h3style/skills/papercraft-stop-motion-explainer/SKILL.md) | 分层纸艺与微缩定格科普 |
+| [`h3style:brand-promo-video-generator`](plugins/h3style/skills/brand-promo-video-generator/SKILL.md) | 基于可信事实的品牌、应用、网站与发布宣传 |
+| [`h3style:music-video-subtitle-generator`](plugins/h3style/skills/music-video-subtitle-generator/SKILL.md) | 节拍、歌词与空间字体驱动的 MV |
+| [`h3style:co-op-game-intro-generator`](plugins/h3style/skills/co-op-game-intro-generator/SKILL.md) | 双人协作游戏菜单与开场动画 |
+| [`h3style:paper-collage-explainer-generator`](plugins/h3style/skills/paper-collage-explainer-generator/SKILL.md) | 网点印刷感纸拼贴解说 |
+| [`h3style:handdrawn-live-video-generator`](plugins/h3style/skills/handdrawn-live-video-generator/SKILL.md) | 真人空间与粗粝发光手绘动画融合 |
+
+Adviser 最多选择一个匹配的官方风格层，然后仍按素材实际用途选择本地 H3 输入工作流。运行 `python3 plugins/h3style/scripts/sync_upstream.py` 可刷新官方快照；来源 commit 与逐技能哈希记录在 [`upstream-lock.json`](plugins/h3style/upstream-lock.json) 中。
 
 ## 🔄 比较并更新已安装技能
 

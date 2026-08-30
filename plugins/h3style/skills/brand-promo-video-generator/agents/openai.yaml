@@ -1,0 +1,4 @@
+interface:
+  display_name: "Brand Promo Video Generator"
+  short_description: "Plan brand-safe promotional videos for H3"
+  default_prompt: "Use $brand-promo-video-generator to adapt my idea with the official MiniMax H3 workflow."

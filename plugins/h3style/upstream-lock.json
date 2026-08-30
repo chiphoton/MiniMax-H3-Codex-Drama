@@ -1,0 +1,65 @@
+{
+  "schema_version": 1,
+  "repository": "https://github.com/MiniMax-AI/MiniMax-H3.git",
+  "commit": "d21241f0a4b3acbb34c97dae47fa417b7065e438",
+  "commit_date": "2026-08-15T16:31:16+08:00",
+  "official_update_date": "2026-08-15",
+  "plugin_version": "2026.8.15",
+  "synced_at": "2026-08-30T08:00:09.592482+00:00",
+  "skills": {
+    "3d-animation-short-generator": {
+      "path": "skills/3d-animation-short-generator",
+      "files": 8,
+      "sha256": "f27d2aa06a7d7a727f4864902c2bf60b7a0b44886bf3ae223deda0eabdb893b6",
+      "portable": false
+    },
+    "brand-promo-video-generator": {
+      "path": "skills/brand-promo-video-generator",
+      "files": 3,
+      "sha256": "c210a40359a7534420ea782d8001d547b6b32d3928e50d7978b2481e47d56fe7",
+      "portable": false
+    },
+    "co-op-game-intro-generator": {
+      "path": "skills/co-op-game-intro-generator",
+      "files": 5,
+      "sha256": "d7df8b56c0d1a680376f45aff4c07c50a618ce9dc32f3a3ed9098734f3125788",
+      "portable": false
+    },
+    "h3-prompt-writing": {
+      "path": "skills/h3-prompt-writing",
+      "files": 4,
+      "sha256": "f7b4dd818d49b80f9181831a72c2e87594acd8d1ee064eab0cc64de64b8329a6",
+      "portable": true
+    },
+    "handdrawn-live-video-generator": {
+      "path": "skills/handdrawn-live-video-generator",
+      "files": 3,
+      "sha256": "104bbeff9de27346e9f69e65f60abd74385b9b21bc7d5fc8111225d07b626998",
+      "portable": false
+    },
+    "minimalist-product-ad-generator": {
+      "path": "skills/minimalist-product-ad-generator",
+      "files": 3,
+      "sha256": "56a59cb699597540c2d44c54695277753fa9dd6ae5f9a5f01b4d90f177733808",
+      "portable": false
+    },
+    "music-video-subtitle-generator": {
+      "path": "skills/music-video-subtitle-generator",
+      "files": 3,
+      "sha256": "fc36569f16018e2a767a96c6d6a42ec4c2336221579d04d02a79b1c8d50b9ae2",
+      "portable": false
+    },
+    "paper-collage-explainer-generator": {
+      "path": "skills/paper-collage-explainer-generator",
+      "files": 3,
+      "sha256": "75f8f3aa4670cd26a1c22e407899f62a45c95cb0ed48708848ca3c5dbed78d19",
+      "portable": false
+    },
+    "papercraft-stop-motion-explainer": {
+      "path": "skills/papercraft-stop-motion-explainer",
+      "files": 3,
+      "sha256": "8d70d30f961b4488cfa99b82daccea0063f70ee61294c54cfff5d99e4a01e5a2",
+      "portable": false
+    }
+  }
+}

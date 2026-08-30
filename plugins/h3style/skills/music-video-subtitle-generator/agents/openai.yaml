@@ -1,0 +1,4 @@
+interface:
+  display_name: "Music Video Subtitle Generator"
+  short_description: "Plan music videos with lyric typography"
+  default_prompt: "Use $music-video-subtitle-generator to adapt my idea with the official MiniMax H3 workflow."

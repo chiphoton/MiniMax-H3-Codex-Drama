@@ -1,0 +1,4 @@
+interface:
+  display_name: "Papercraft Stop-Motion Explainer"
+  short_description: "Plan layered papercraft explainer videos"
+  default_prompt: "Use $papercraft-stop-motion-explainer to adapt my idea with the official MiniMax H3 workflow."

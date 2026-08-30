@@ -1,0 +1,4 @@
+interface:
+  display_name: "Paper Collage Explainer Generator"
+  short_description: "Plan tactile paper-collage explainer videos"
+  default_prompt: "Use $paper-collage-explainer-generator to adapt my idea with the official MiniMax H3 workflow."

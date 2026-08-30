@@ -1,0 +1,4 @@
+interface:
+  display_name: "Co-op Game Intro Generator"
+  short_description: "Design two-player game intro videos for H3"
+  default_prompt: "Use $co-op-game-intro-generator to adapt my idea with the official MiniMax H3 workflow."

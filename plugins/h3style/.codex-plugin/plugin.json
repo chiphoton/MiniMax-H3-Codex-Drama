@@ -1,0 +1,38 @@
+{
+  "name": "h3style",
+  "version": "2026.8.15",
+  "description": "Codex adapters for the official MiniMax H3 prompt-writing and style workflow skills.",
+  "author": {
+    "name": "chiphoton",
+    "url": "https://github.com/chiphoton"
+  },
+  "homepage": "https://github.com/chiphoton/MiniMax-H3-Codex-Drama/tree/main/plugins/h3style",
+  "repository": "https://github.com/chiphoton/MiniMax-H3-Codex-Drama",
+  "keywords": [
+    "minimax-h3",
+    "official-skills",
+    "video-generation",
+    "prompt-engineering",
+    "style-workflows",
+    "codex"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "H3 Style",
+    "shortDescription": "Official MiniMax H3 skills adapted for Codex",
+    "longDescription": "Use preserved official MiniMax H3 prompt-writing guidance and adapt eight official MiniMax Hub style workflows into Codex-native planning, prompt, and handoff workflows without requiring unavailable Hub canvas tools.",
+    "developerName": "chiphoton",
+    "category": "Creativity",
+    "capabilities": [
+      "Interactive",
+      "Read"
+    ],
+    "websiteURL": "https://github.com/MiniMax-AI/MiniMax-H3/tree/main/skills",
+    "defaultPrompt": [
+      "Plan a minimalist H3 product ad from my product references.",
+      "Turn this lesson into a papercraft stop-motion explainer.",
+      "Rewrite this request in the official H3 prompt format."
+    ],
+    "brandColor": "#FF6C37"
+  }
+}

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Hand-drawn Live Video Generator"
+  short_description: "Blend hand-drawn animation with live action"
+  default_prompt: "Use $handdrawn-live-video-generator to adapt my idea with the official MiniMax H3 workflow."

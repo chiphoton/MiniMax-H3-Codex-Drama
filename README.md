@@ -20,7 +20,7 @@
   <code>Codex Plugin</code> · <code>MiniMax H3</code> · <code>GPT-Image</code> · <code>ComfyUI</code> · <code>FFmpeg</code>
 </p>
 
-MiniMax-H3 Drama is a **Codex-first video production plugin**, not just a prompt collection. Codex plans the production, creates reusable visual sources of truth, routes every shot to the right MiniMax H3 workflow, monitors local ComfyUI, and delivers a resumable project with picture, sound, captions, and QC.
+MiniMax-H3 Drama is a **Codex-first video and native-audio production plugin**, not just a prompt collection. Codex plans the production, creates reusable visual sources of truth, routes each shot or audio-only clip to the right MiniMax H3 workflow, monitors local ComfyUI, and delivers resumable media with picture, sound, captions, and QC.
 
 ## ✨ Why creators use it
 
@@ -30,7 +30,7 @@ MiniMax-H3 Drama is a **Codex-first video production plugin**, not just a prompt
 | 🧬 **Cross-shot consistency** | Identity, wardrobe, product geometry, locations, props, screen direction, light, and audio are tracked explicitly |
 | 🧠 **Profile-driven direction** | Built-in short-drama and commercial grammar, plus reusable profiles distilled from your own reference videos |
 | 🛠️ **Local, deterministic finishing** | Official H3 workflows through local ComfyUI; versioned FFmpeg editing, mixing, captions, exports, and QC |
-| ⚡ **Turbo by default** | T2V, I2V, and R2V use the MiniMax H3 Turbo LoRA at 6 steps; `[turbo=false]` keeps the original 20-step graphs available |
+| ⚡ **Turbo by default** | T2V, I2V, R2V, and audio-only generation use the MiniMax H3 Turbo LoRA at 6 steps; `[turbo=false]` keeps the original 20-step graphs available |
 | 🔁 **Resumable by design** | Every prompt, input hash, workflow, `prompt_id`, take, selection, assumption, and artifact stays in the project ledger |
 
 <p align="center">
@@ -45,7 +45,7 @@ MiniMax-H3 Drama is a **Codex-first video production plugin**, not just a prompt
 
 ### 1. Install for Codex
 
-This repository publishes two Codex plugins from one marketplace: the nine-skill production plugin with a pinned local ComfyUI MCP connection, plus the separate `h3style` companion containing the official MiniMax-H3 skills. Install the production plugin, then add the official style companion when you want those workflows:
+This repository publishes two Codex plugins from one marketplace: the ten-skill production plugin with a pinned local ComfyUI MCP connection, plus the separate `h3style` companion containing the official MiniMax-H3 skills. Install the production plugin, then add the official style companion when you want those workflows:
 
 ```bash
 codex plugin marketplace add chiphoton/MiniMax-H3-Codex-Drama
@@ -150,7 +150,7 @@ motion. Create an 8-second tense corridor reveal, then run it in ComfyUI.
 
 See [skill configuration](docs/skill-config.md) for every control flag, configuration file, model override, generation setting, and ready-to-copy combination.
 
-## 🧰 Nine skills, one production system
+## 🧰 Ten skills, one production system
 
 | | Skill | Role |
 |---:|---|---|
@@ -158,6 +158,7 @@ See [skill configuration](docs/skill-config.md) for every control flag, configur
 | 🧪 | [`minimax-h3-profile-distiller`](skills/minimax-h3-profile-distiller/SKILL.md) | Distill local reference videos into a safe, reusable production profile |
 | 🧭 | [`minimax-h3-adviser`](skills/minimax-h3-adviser/SKILL.md) | Choose the workflow, improve a prompt, or diagnose a failed result |
 | ✍️ | [`minimax-h3-text-to-video`](skills/minimax-h3-text-to-video/SKILL.md) | Invent a complete shot from language |
+| 🔊 | [`minimax-h3-audio`](skills/minimax-h3-audio/SKILL.md) | Generate prompt-only dialogue, narration, ambience, robot sounds, or animal calls as native FLAC |
 | 🖼️ | [`minimax-h3-frame-to-video`](skills/minimax-h3-frame-to-video/SKILL.md) | Animate an exact first frame or bridge exact first/last frames |
 | 🎛️ | [`minimax-h3-reference-to-video`](skills/minimax-h3-reference-to-video/SKILL.md) | Bind identity, design, style, motion, camera, performance, or audio references |
 | ✂️ | [`minimax-h3-video-editor`](skills/minimax-h3-video-editor/SKILL.md) | Make a precise change while stating what must remain unchanged |
@@ -240,7 +241,7 @@ Re-running the same project resumes completed work and versions new attempts ins
 
 ## 🔌 Notes
 
-- Official pinned T2V, I2V, and R2V graphs are prepared deterministically; arbitrary custom workflow adaptation is intentionally out of scope.
+- Pinned T2V, I2V, and R2V graphs plus the verified derived audio-only graph are prepared deterministically; arbitrary custom workflow adaptation is intentionally out of scope.
 - Voice and captions can be `auto`, `on`, or `off`. No paid voice service is called silently.
 - FFmpeg is the v1 editing backend; selected clips, audio stems, captions, and timeline data remain available for manual NLE import.
 - Prompt-only Open WebUI editions remain in [`adapter/open-webui`](adapter/open-webui/). The producer and profile distiller are Codex-specific.

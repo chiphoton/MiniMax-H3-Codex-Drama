@@ -92,7 +92,7 @@ def required_models(mode: str, turbo: bool) -> list[str]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--mode", required=True, choices=("t2v", "i2v", "r2v"))
+    parser.add_argument("--mode", required=True, choices=("t2v", "i2v", "r2v", "audio"))
     parser.add_argument("--project-root", type=Path, default=Path.cwd())
     parser.add_argument("--turbo", action=argparse.BooleanOptionalAction, default=None)
     args = parser.parse_args()

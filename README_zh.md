@@ -20,7 +20,7 @@
   <code>Codex Plugin</code> · <code>MiniMax H3</code> · <code>GPT-Image</code> · <code>ComfyUI</code> · <code>FFmpeg</code>
 </p>
 
-MiniMax-H3 Drama 是一套 **Codex 优先的视频制作插件**，不只是提示词合集。Codex 会规划整支视频、建立可复用的视觉基准、为每个镜头选择合适的 MiniMax H3 工作流、监控本地 ComfyUI，并交付包含画面、声音、字幕和 QC 的可续作工程。
+MiniMax-H3 Drama 是一套 **Codex 优先的视频与原生音频制作插件**，不只是提示词合集。Codex 会规划制作、建立可复用的视觉基准、为每个镜头或纯音频片段选择合适的 MiniMax H3 工作流、监控本地 ComfyUI，并交付包含画面、声音、字幕和 QC 的可续作媒体工程。
 
 ## ✨ 为什么值得用
 
@@ -30,7 +30,7 @@ MiniMax-H3 Drama 是一套 **Codex 优先的视频制作插件**，不只是提�
 | 🧬 **跨镜头一致性** | 显式追踪人物身份、服装、产品结构、场景、道具、轴线、光线和声音 |
 | 🧠 **Profile 驱动的导演方法** | 内置短剧与广告语法，也能从你自己的参考视频中提炼可复用 Profile |
 | 🛠️ **本地、确定性的后期** | 本地 ComfyUI 官方 H3 工作流；版本化 FFmpeg 剪辑、混音、字幕、导出和 QC |
-| ⚡ **默认启用 Turbo** | T2V、I2V 与 R2V 默认使用 6 步 MiniMax H3 Turbo LoRA；`[turbo=false]` 可切回原始 20 步工作流 |
+| ⚡ **默认启用 Turbo** | T2V、I2V、R2V 与纯音频生成默认使用 6 步 MiniMax H3 Turbo LoRA；`[turbo=false]` 可切回原始 20 步工作流 |
 | 🔁 **天然支持断点续作** | 提示词、输入哈希、工作流、`prompt_id`、take、选片、假设和资产全部进入工程账本 |
 
 <p align="center">
@@ -45,7 +45,7 @@ MiniMax-H3 Drama 是一套 **Codex 优先的视频制作插件**，不只是提�
 
 ### 1. 安装到 Codex
 
-本仓库在同一个市场中提供两个 Codex 插件：包含 9 个技能与固定版本本地 ComfyUI MCP 连接的制作插件，以及独立的官方技能伴侣 `h3style`。先安装制作插件；如需官方工作流，再安装风格伴侣：
+本仓库在同一个市场中提供两个 Codex 插件：包含 10 个技能与固定版本本地 ComfyUI MCP 连接的制作插件，以及独立的官方技能伴侣 `h3style`。先安装制作插件；如需官方工作流，再安装风格伴侣：
 
 ```bash
 codex plugin marketplace add chiphoton/MiniMax-H3-Codex-Drama
@@ -148,7 +148,7 @@ $minimax-h3-adviser
 
 所有控制标记、配置文件、模型覆盖、生成参数和可复制组合，详见[技能参数配置](docs/skill-config.md)。
 
-## 🧰 9 个技能，一套制作系统
+## 🧰 10 个技能，一套制作系统
 
 | | 技能 | 作用 |
 |---:|---|---|
@@ -156,6 +156,7 @@ $minimax-h3-adviser
 | 🧪 | [`minimax-h3-profile-distiller`](skills/minimax-h3-profile-distiller/SKILL.md) | 从本地参考视频提炼安全、可复用的制作 Profile |
 | 🧭 | [`minimax-h3-adviser`](skills/minimax-h3-adviser/SKILL.md) | 选择工作流、优化提示词或诊断失败结果 |
 | ✍️ | [`minimax-h3-text-to-video`](skills/minimax-h3-text-to-video/SKILL.md) | 纯文本设计完整镜头 |
+| 🔊 | [`minimax-h3-audio`](skills/minimax-h3-audio/SKILL.md) | 以纯提示词生成对白、旁白、环境声、机器人声或动物叫声，并输出原生 FLAC |
 | 🖼️ | [`minimax-h3-frame-to-video`](skills/minimax-h3-frame-to-video/SKILL.md) | 动画化精确首帧，或连接精确首尾帧 |
 | 🎛️ | [`minimax-h3-reference-to-video`](skills/minimax-h3-reference-to-video/SKILL.md) | 绑定身份、设计、风格、动作、运镜、表演或音频参考 |
 | ✂️ | [`minimax-h3-video-editor`](skills/minimax-h3-video-editor/SKILL.md) | 精确描述修改项，并明确必须保持不变的内容 |
@@ -238,7 +239,7 @@ outputs/<project>/
 
 ## 🔌 说明
 
-- 官方固定版本的 T2V、I2V、R2V 图会被确定性准备；当前版本不适配任意自定义工作流。
+- 固定版本的 T2V、I2V、R2V 图以及已验证的派生纯音频图会被确定性准备；当前版本不适配任意自定义工作流。
 - 配音和字幕可设为 `auto`、`on` 或 `off`；不会静默调用付费语音服务。
 - v1 使用 FFmpeg 作为剪辑后端；选中片段、音频 stems、字幕和时间线数据均可手动导入 NLE。
 - 纯提示词版 Open WebUI 适配器仍位于 [`adapter/open-webui`](adapter/open-webui/)；Producer 和 Profile Distiller 仅面向 Codex。

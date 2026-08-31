@@ -1,11 +1,11 @@
 ---
 name: minimax-h3-comfyui
-description: Prepare, validate, submit, monitor, and retrieve MiniMax H3 text-to-video, first/last-frame image-to-video, and reference-to-video workflows on a local or self-hosted ComfyUI instance. Use when a user explicitly asks to run, generate, execute, queue, preview, or fetch MiniMax H3 work through ComfyUI. Uses pinned Comfy-Org templates and bundled Turbo variants, and patches known fields deterministically; it does not adapt arbitrary custom workflows.
+description: Prepare, validate, submit, monitor, and retrieve MiniMax H3 text-to-video, first/last-frame image-to-video, reference-to-video, and verified 32x32 audio-only workflows on a local or self-hosted ComfyUI instance. Use when a user explicitly asks to run, generate, execute, queue, preview, or fetch MiniMax H3 work through ComfyUI. Uses pinned Comfy-Org templates and bundled Turbo variants, and patches known fields deterministically; it does not adapt arbitrary custom workflows.
 ---
 
 # MiniMax H3 ComfyUI
 
-Run a finished MiniMax H3 prompt through ComfyUI using bundled T2V, I2V, or R2V workflows. Turbo is the default variant; preserve the selected pinned graph unless the user explicitly overrides a declared field.
+Run a finished MiniMax H3 prompt through ComfyUI using bundled T2V, I2V, R2V, or audio-only workflows. Turbo is the default variant; preserve the selected pinned graph unless the user explicitly overrides a declared field.
 
 ## Interpret control flags
 
@@ -28,10 +28,12 @@ Without an enhancement flag, treat the prompt as finished: do not silently rewri
 - T2V: `../minimax-h3-text-to-video/SKILL.md`
 - I2V: `../minimax-h3-frame-to-video/SKILL.md`
 - R2V: `../minimax-h3-reference-to-video/SKILL.md`
+- Audio only: `../minimax-h3-audio/SKILL.md`
 
 ## Select the bundled workflow
 
-- No controlling media: `assets/workflows/t2v-turbo.api.json` by default; `t2v.api.json` when Turbo is false.
+- Explicit audio-only output with no controlling media: `assets/workflows/audio-turbo.api.json` by default; `audio.api.json` when Turbo is false. Keep its disposable visual latent fixed at 32x32.
+- No controlling media and video output: `assets/workflows/t2v-turbo.api.json` by default; `t2v.api.json` when Turbo is false.
 - One literal first frame, or literal first and last frames: `assets/workflows/i2v-turbo.api.json` by default; `i2v.api.json` when Turbo is false.
 - Media used for identity, style, motion, camera, performance, voice, music, or rhythm: `assets/workflows/r2v-turbo.api.json` by default; `r2v.api.json` when Turbo is false.
 
@@ -48,13 +50,15 @@ Read [references/runtime.md](references/runtime.md) before using ComfyUI. Follow
 5. Run `scripts/prepare_workflow.py` to patch only the manifest-declared fields, then validate the prepared API graph.
 6. If explicitly requested, load or preview the matching prepared UI graph.
 7. Submit once. Respect the return behavior above. For awaited runs, prefer the live sampler ETA from ComfyUI's log stream to fixed-interval polling, while binding completion and errors to the exact `prompt_id`.
-8. On completion, fetch the output video to a temporary or user-selected directory and return it with the `prompt_id`.
+8. On completion, fetch the output audio or video to a temporary or user-selected directory and return it with the `prompt_id`.
 
 Do not submit a workflow while required media, a compatible model choice, or validation errors remain unresolved.
 
 ## Preserve selected defaults
 
 Unless explicitly supplied by the user or non-empty configuration, preserve the selected workflow's prompt-independent defaults for resolution, seed, scheduler, steps, denoise, reference sizing, model filenames, Turbo LoRA, and output prefix. Turbo pins its custom sampler, `simple` scheduler, LoRA strength `1.0`, low-VRAM mode off, and 6 steps. A Turbo step override must remain from 4 through 8; disable Turbo to select another sampler or scheduler.
+
+Audio mode is the exception to resolution configuration: it always patches the disposable visual latent to 32x32 and rejects any other explicit size. It accepts no first/last frame or reference media; route reference-controlled sound or voice work to R2V.
 
 Allowed deterministic patches are:
 
@@ -74,6 +78,6 @@ Never patch fields by searching for example text or relying on UI coordinates. U
 
 ## Return a concise execution report
 
-For completed jobs, return the selected mode, relevant settings, `prompt_id`, and fetched video. For asynchronous jobs, return the mode and `prompt_id` plus how to request status or results later. For failures, return the failed node/error, what was checked, and the smallest next action.
+For completed jobs, return the selected mode, relevant settings, `prompt_id`, and fetched audio or video. For asynchronous jobs, return the mode and `prompt_id` plus how to request status or results later. For failures, return the failed node/error, what was checked, and the smallest next action.
 
 Do not claim the job completed merely because it left the queue; confirm its exact history entry or fresh output file.

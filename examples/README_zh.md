@@ -45,3 +45,7 @@
     </td>
   </tr>
 </table>
+
+<p align="center">
+  <a href="./audio/README_zh.md"><strong>🔊 浏览 MiniMax H3 音频案例合集</strong></a>
+</p>

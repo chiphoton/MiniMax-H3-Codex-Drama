@@ -17,7 +17,7 @@ Before connecting, writing a prepared graph, or uploading media, strip bracket c
 
 ## 2. Test reachability
 
-Use `scripts/inspect_instance.py --mode <t2v|i2v|r2v> --project-root <project-root>` or the MCP `get_system_stats` operation to test reachability. The inspector follows the configured Turbo default; pass `--turbo` or `--no-turbo` when the request overrides it. If the default is reachable, continue without asking about configuration. If unreachable, warn once and offer only two choices: retry or update the applicable config address. Do not create a config file unless the user chooses to update it.
+Use `scripts/inspect_instance.py --mode <t2v|i2v|r2v|audio> --project-root <project-root>` or the MCP `get_system_stats` operation to test reachability. The inspector follows the configured Turbo default; pass `--turbo` or `--no-turbo` when the request overrides it. If the default is reachable, continue without asking about configuration. If unreachable, warn once and offer only two choices: retry or update the applicable config address. Do not create a config file unless the user chooses to update it.
 
 The bundled MCP entry targets `http://localhost:8188`. When a non-default address is configured, the MCP client's `COMFYUI_URL` must target that same normalized address; report a mismatch instead of sending work to the wrong server.
 
@@ -25,7 +25,7 @@ The bundled MCP entry targets `http://localhost:8188`. When a non-default addres
 
 Required model roles are:
 
-- T2V/I2V diffusion: `fl2va`
+- T2V/I2V/audio diffusion: `fl2va`
 - R2V diffusion: `ref2va`
 - all modes: `text_encoder`, `video_vae`, and `audio_vae`
 - Turbo modes: `turbo_lora`, defaulting to `minimax_h3_turbo_v4_step600_ema.safetensors`
@@ -53,6 +53,8 @@ Inspect chat attachments before routing. Resolve each local attachment to an abs
 
 Use the returned ComfyUI filename in the preparer. I2V requires a first frame and accepts one optional last frame. R2V accepts at most 9 images, 3 videos, and 3 standalone audio files. The preparer connects a reference video's frames and its paired audio from `GetVideoComponents`.
 
+Audio mode uploads no media. It is prompt-only and keeps its disposable visual latent fixed at 32x32. If a reference must control voice or sound, route to R2V instead.
+
 Never guess the remote input directory or insert the chat attachment's local path into `LoadImage`, `LoadVideo`, or `LoadAudio`.
 
 ## 5. Prepare and validate
@@ -68,6 +70,8 @@ python3 <skill>/scripts/prepare_workflow.py \
 ```
 
 Turbo is selected by default. Pass `--no-turbo` only when `[turbo=false]` (or another false alias) wins; pass `--turbo` when an explicit true flag must override a false config value. Pass uploaded filenames with `--first-frame`, `--last-frame`, repeated `--reference-image`, repeated `--reference-video`, or repeated `--reference-audio`. Pass resolved filenames with `--fl2va`, `--ref2va`, `--text-encoder`, `--video-vae`, `--audio-vae`, and `--turbo-lora` when applicable.
+
+For audio-only work, pass `--mode audio`; do not pass width, height, or media flags. The preparer selects the audio API/UI pair, fixes 32x32 internally, removes video output, and targets core `SaveAudio`.
 
 Use `validate_workflow` on the resulting API graph. If it reports missing models, re-run the resolution procedure. If it reports a missing core H3 node, report that the connected ComfyUI version lacks MiniMax H3 support. If it reports either Turbo node missing, report the node-pack setup above and suggest `[turbo=false]` only as an explicit user choice. Do not enqueue until validation has no errors.
 
@@ -112,6 +116,8 @@ Never enqueue a second attempt silently.
 
 ## 8. Fetch results
 
-Read the exact history entry. If `SaveVideo` does not register a media output, use `list_output_images` and match a fresh file by filename prefix and modification time. Fetch the video with `get_image`, setting `save_dir` to a temporary directory or a user-selected directory rather than the repository root.
+Read the exact history entry. For video modes, if `SaveVideo` does not register a media output, use `list_output_images` and match a fresh file by filename prefix and modification time. Fetch the video with `get_image`, setting `save_dir` to a temporary directory or a user-selected directory rather than the repository root.
 
-In Codex Desktop, return the absolute local video path in a rendered media link together with the `prompt_id`. Outside Codex Desktop, return the saved absolute path and ComfyUI output reference.
+For audio mode, read the `SaveAudio` output record from the exact history entry, fetch it through ComfyUI's `/view` endpoint or matching media tool, and save it to a temporary or user-selected directory. Verify that the FLAC decodes; for final claims also check duration and, when relevant, transcript and peak/clipping behavior.
+
+In Codex Desktop, return the absolute local audio or video path in a rendered media link together with the `prompt_id`. Outside Codex Desktop, return the saved absolute path and ComfyUI output reference.

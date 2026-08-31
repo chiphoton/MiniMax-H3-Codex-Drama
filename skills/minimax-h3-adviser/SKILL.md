@@ -1,6 +1,6 @@
 ---
 name: minimax-h3-adviser
-description: Advise, enhance, diagnose, and route MiniMax H3 video prompts across official H3 style workflows, text-to-video, first/last-frame, multimodal reference-to-video, precise video-editing, and optional ComfyUI execution. Use when a user has a video idea, draft prompt, failed generation, uncertain input strategy, asks which MiniMax H3 workflow to use, or explicitly asks to run it through ComfyUI. Grill one decision at a time unless the user requests fast mode, use an official h3style overlay only on a clear match, and invoke ComfyUI only on explicit execution intent.
+description: Advise, enhance, diagnose, and route MiniMax H3 video or audio prompts across official H3 style workflows, text-to-video, first/last-frame, multimodal reference-to-video, precise video-editing, verified 32x32 audio-only generation, and optional ComfyUI execution. Use when a user has a media idea, draft prompt, failed generation, uncertain input strategy, asks which MiniMax H3 workflow to use, or explicitly asks to run it through ComfyUI. Grill one decision at a time unless the user requests fast mode, use an official h3style overlay only on a clear match, and invoke ComfyUI only on explicit execution intent.
 ---
 
 # MiniMax H3 Adviser
@@ -86,6 +86,7 @@ If the user requests a finished multi-shot film rather than one prompt or one ge
 
 For one prompt or one clip, use [references/workflow-map.md](references/workflow-map.md) for the complete routing table and provider-neutral starting settings, then choose one prompt specialist:
 
+- Audio-only output invented from text, with no reference media: load and apply `../minimax-h3-audio/SKILL.md`.
 - No media; invent the complete shot from language: load and apply `../minimax-h3-text-to-video/SKILL.md`.
 - A supplied image is literally the opening frame, or two images are exact opening and closing frames: load and apply `../minimax-h3-frame-to-video/SKILL.md`.
 - Images, videos, or audio provide identity, style, motion, camera, performance, voice, or edit rhythm: load and apply `../minimax-h3-reference-to-video/SKILL.md`.
@@ -97,7 +98,7 @@ After routing, continue through the specialist automatically and incorporate the
 
 ## Hand explicit execution to ComfyUI
 
-After the selected specialist has produced the finished prompt, load and apply `../minimax-h3-comfyui/SKILL.md` only when the user explicitly asks to generate a video, run, submit, queue, execute, preview a ComfyUI workflow, fetch its output, or supplies a ComfyUI control flag such as `[return=true]`.
+After the selected specialist has produced the finished prompt, load and apply `../minimax-h3-comfyui/SKILL.md` only when the user explicitly asks to generate audio or video, run, submit, queue, execute, preview a ComfyUI workflow, fetch its output, or supplies a ComfyUI control flag such as `[return=true]`.
 
 Do not treat “generate a prompt,” “write a prompt,” or “recommend a workflow” as execution intent. Do not invoke ComfyUI merely because it is installed or reachable.
 

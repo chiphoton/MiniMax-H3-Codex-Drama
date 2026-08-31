@@ -4,6 +4,7 @@
 
 | User situation | Workflow | ComfyUI template | Specialist |
 |---|---|---|---|
+| Audio-only output invented from text; no reference media | 32x32 audio proxy | Audio | `minimax-h3-audio` |
 | No media; H3 invents the whole clip | Text to video | T2V | `minimax-h3-text-to-video` |
 | One image is the literal first frame | First-frame animation | I2V | `minimax-h3-frame-to-video` |
 | Two images are literal first and last frames | First/last-frame transition | I2V | `minimax-h3-frame-to-video` |
@@ -12,11 +13,12 @@
 
 The asset's job decides the route. A portrait used as the literal opening composition is a first frame. The same portrait used only to preserve identity is a reference image.
 
-The ComfyUI column is used only on explicit execution intent. The bundled official templates are T2V, I2V, and R2V; they do not provide a distinct surgical video-edit graph. A video-editor prompt therefore runs as R2V reference-conditioned regeneration and should not be described as pixel-stable source editing.
+The ComfyUI column is used only on explicit execution intent. The bundled official templates are T2V, I2V, and R2V. Audio is a verified repository-derived graph that keeps H3's joint sampler at a fixed 32x32 visual latent and saves only native audio; it is not an upstream standalone audio model. The templates do not provide a distinct surgical video-edit graph. A video-editor prompt therefore runs as R2V reference-conditioned regeneration and should not be described as pixel-stable source editing.
 
 ## Provider-neutral starting settings
 
 - Output duration: prefer 5–15 seconds per generated clip.
+- Audio proxy: keep the visual latent fixed at 32x32; output is lossless FLAC and should receive transcript and peak/clipping QC.
 - Resolution: use `768P` for faster iteration or `2K` for a final pass when the active workflow and hardware support it.
 - Text-to-video ratios: start with `21:9`, `16:9`, `4:3`, `1:1`, `3:4`, or `9:16`.
 - Image-to-video: follow the first-frame image's aspect ratio.
@@ -32,6 +34,7 @@ These values are production heuristics, not a remote API contract. The executor 
 ## Routing examples
 
 - “Make a clay fox leap over a canyon; I have no assets.” → Text to video.
+- “Generate a calm airline announcement with no picture.” → 32x32 audio proxy.
 - “Animate this poster exactly as the opening frame.” → Frame to video.
 - “Start with this empty street and end exactly on this crowded street.” → Frame to video.
 - “Use this portrait for the actor and this clip only for camera motion.” → Reference to video.

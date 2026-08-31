@@ -45,3 +45,7 @@ These featured examples show a compact selection of entity sheets, scene designs
     </td>
   </tr>
 </table>
+
+<p align="center">
+  <a href="./audio/README.md"><strong>🔊 Browse the MiniMax H3 audio example collection</strong></a>
+</p>

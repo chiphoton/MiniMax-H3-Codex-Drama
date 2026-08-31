@@ -26,6 +26,20 @@
       "r2v-turbo.api.json": "b3eb1a458d272c0e04ee3f788d68c474b43b8a716776d4eb18007c682b65049a"
     }
   },
+  "audio_proxy_source": {
+    "derived_from": {
+      "standard": "t2v.ui.json",
+      "turbo": "t2v-turbo.ui.json"
+    },
+    "method": "Fix the H3 visual latent at 32x32, remove video decoding and muxing, and save only the decoded native audio stream as FLAC.",
+    "verified_on": "2026-08-31",
+    "files": {
+      "audio.api.json": "d49e30c5e74ea594355a8228ff3591c0398aa1e294eb608c9f24dfe80194459b",
+      "audio.ui.json": "64ff04a0acd0f9a181101384577e2d3f121bfefd15345157b574c5ec63cd22d0",
+      "audio-turbo.api.json": "03fce6a8da47c3ccdaed213c5740cfc8e649ca68e651d13f39158bd6c1c1f684",
+      "audio-turbo.ui.json": "71a5207146311e67315a2541c5a8911680e9792c1bb7af22a24cfa66460a9fdb"
+    }
+  },
   "modes": {
     "t2v": {
       "variants": {
@@ -139,6 +153,44 @@
         "audio_vae": ["120", "vae_name"]
       },
       "output": ["92", "filename_prefix"]
+    },
+    "audio": {
+      "variants": {
+        "standard": {
+          "ui": "audio.ui.json",
+          "api": "audio.api.json",
+          "sampling": {
+            "sampler": ["17", "sampler_name"],
+            "scheduler": ["9", "scheduler"],
+            "steps": ["9", "steps"],
+            "denoise": ["9", "denoise"]
+          }
+        },
+        "turbo": {
+          "ui": "audio-turbo.ui.json",
+          "api": "audio-turbo.api.json",
+          "models": {
+            "turbo_lora": ["134", "lora_name"]
+          },
+          "sampling": {
+            "scheduler": ["9", "scheduler"],
+            "steps": ["9", "steps"],
+            "denoise": ["9", "denoise"]
+          }
+        }
+      },
+      "prompt": ["104", "prompt"],
+      "size": ["104", "width", "height"],
+      "fixed_size": [32, 32],
+      "length": ["104", "length"],
+      "seed": ["15", "noise_seed"],
+      "models": {
+        "fl2va": ["6", "unet_name"],
+        "text_encoder": ["13", "clip_name"],
+        "video_vae": ["11", "vae_name"],
+        "audio_vae": ["24", "vae_name"]
+      },
+      "output": ["25", "filename_prefix"]
     }
   }
 }

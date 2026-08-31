@@ -217,6 +217,12 @@ def add_r2v_media(
 
 
 def apply_media(workflow: dict[str, Any], args: argparse.Namespace) -> None:
+    if args.mode == "audio":
+        if args.first_frame or args.last_frame or args.reference_image or args.reference_video or args.reference_audio:
+            raise ConfigError(
+                "Audio proxy mode is prompt-only; use R2V when media must control a voice or sound"
+            )
+        return
     if args.mode == "t2v" and (args.first_frame or args.last_frame):
         raise ConfigError("T2V does not accept first or last frames; select i2v")
     if args.mode == "i2v":
@@ -262,17 +268,34 @@ def build_workflow(args: argparse.Namespace) -> tuple[dict[str, Any], dict[str, 
     if prompt is not None:
         set_input(workflow, mode["prompt"], prompt)
 
-    width = args.width if args.width is not None else generation.get("width")
-    height = args.height if args.height is not None else generation.get("height")
-    if (width is None) != (height is None):
-        raise ConfigError("width and height must be supplied together")
-    if width is not None:
-        for name, value in (("width", width), ("height", height)):
-            if value < 32 or value % 32:
-                raise ConfigError(f"{name} must be a multiple of 32")
+    explicit_width = args.width
+    explicit_height = args.height
+    if args.mode == "audio":
+        if (explicit_width is None) != (explicit_height is None):
+            raise ConfigError("width and height must be supplied together")
+        fixed_width, fixed_height = mode["fixed_size"]
+        if explicit_width is not None and (explicit_width, explicit_height) != (
+            fixed_width,
+            fixed_height,
+        ):
+            raise ConfigError(
+                f"Audio proxy mode is fixed at {fixed_width}x{fixed_height}"
+            )
         node_id, width_name, height_name = mode["size"]
-        workflow[node_id]["inputs"][width_name] = width
-        workflow[node_id]["inputs"][height_name] = height
+        workflow[node_id]["inputs"][width_name] = fixed_width
+        workflow[node_id]["inputs"][height_name] = fixed_height
+    else:
+        width = explicit_width if explicit_width is not None else generation.get("width")
+        height = explicit_height if explicit_height is not None else generation.get("height")
+        if (width is None) != (height is None):
+            raise ConfigError("width and height must be supplied together")
+        if width is not None:
+            for name, value in (("width", width), ("height", height)):
+                if value < 32 or value % 32:
+                    raise ConfigError(f"{name} must be a multiple of 32")
+            node_id, width_name, height_name = mode["size"]
+            workflow[node_id]["inputs"][width_name] = width
+            workflow[node_id]["inputs"][height_name] = height
 
     duration = args.duration if args.duration is not None else generation.get("duration_seconds")
     if duration is not None:
@@ -335,7 +358,7 @@ def build_workflow(args: argparse.Namespace) -> tuple[dict[str, Any], dict[str, 
 
 def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser(description=__doc__)
-    result.add_argument("--mode", required=True, choices=("t2v", "i2v", "r2v"))
+    result.add_argument("--mode", required=True, choices=("t2v", "i2v", "r2v", "audio"))
     prompt_group = result.add_mutually_exclusive_group()
     prompt_group.add_argument("--prompt")
     prompt_group.add_argument("--prompt-file", type=Path)

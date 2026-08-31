@@ -56,6 +56,7 @@ class ModelSelectionTests(unittest.TestCase):
         self.assertNotIn("turbo_lora", inspect.required_models("t2v", False))
         self.assertIn("turbo_lora", inspect.required_models("t2v", True))
         self.assertEqual(inspect.required_models("r2v", True)[0], "ref2va")
+        self.assertEqual(inspect.required_models("audio", False)[0], "fl2va")
 
 
 if __name__ == "__main__":

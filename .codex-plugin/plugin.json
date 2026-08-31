@@ -1,7 +1,7 @@
 {
   "name": "minimax-h3-drama",
-  "version": "0.5.0",
-  "description": "Produce profile-driven MiniMax H3 videos, apply optional official H3 style workflows, and run consistent Qwen image edits in Codex through local ComfyUI.",
+  "version": "0.6.0",
+  "description": "Produce profile-driven MiniMax H3 video and native audio, apply optional official H3 style workflows, and run consistent Qwen image edits in Codex through local ComfyUI.",
   "author": {
     "name": "chiphoton",
     "url": "https://github.com/chiphoton"
@@ -23,8 +23,8 @@
   "mcpServers": "./.mcp.json",
   "interface": {
     "displayName": "MiniMax-H3 Drama",
-    "shortDescription": "Produce H3 videos and consistent Qwen image edits",
-    "longDescription": "Plan complete multi-shot videos, create consistent visual assets, generate each shot through local MiniMax H3 ComfyUI workflows, finish picture and sound, and enforce reproducible technical and visual QC. Also run a pinned Qwen Image Edit consistency workflow with one or two references and reproducible workflow artifacts.",
+    "shortDescription": "Produce H3 video, native audio, and Qwen edits",
+    "longDescription": "Plan complete multi-shot videos, create consistent visual assets, generate shots or prompt-only native audio through local MiniMax H3 ComfyUI workflows, finish picture and sound, and enforce reproducible technical and visual QC. Also run a pinned Qwen Image Edit consistency workflow with one or two references and reproducible workflow artifacts.",
     "developerName": "chiphoton",
     "category": "Creativity",
     "capabilities": [
@@ -37,6 +37,7 @@
       "Turn my story and references into a finished short video.",
       "Create a product commercial and deliver the final master.",
       "Distill these reference videos into a reusable profile.",
+      "Generate a narrated or sound-effects-only MiniMax H3 audio clip.",
       "Edit these reference images with Qwen while preserving consistency."
     ],
     "brandColor": "#7C3AED",

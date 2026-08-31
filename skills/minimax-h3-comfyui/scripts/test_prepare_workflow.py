@@ -51,7 +51,7 @@ class PrepareWorkflowTests(unittest.TestCase):
     def test_pinned_assets_match_manifest_hashes(self) -> None:
         manifest = prepare.read_json(prepare.MANIFEST_PATH)
         self.assertEqual(manifest["default_variant"], "turbo")
-        for source in ("source", "turbo_source"):
+        for source in ("source", "turbo_source", "audio_proxy_source"):
             for filename, expected in manifest[source]["files"].items():
                 actual = hashlib.sha256((prepare.WORKFLOW_DIR / filename).read_bytes()).hexdigest()
                 self.assertEqual(actual, expected, filename)
@@ -114,6 +114,7 @@ class PrepareWorkflowTests(unittest.TestCase):
             "t2v": ("9", "17", "16", "134", "6"),
             "i2v": ("9", "17", "16", "134", "6"),
             "r2v": ("124", "123", "126", "141", "127"),
+            "audio": ("9", "17", "16", "134", "6"),
         }
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
@@ -145,6 +146,39 @@ class PrepareWorkflowTests(unittest.TestCase):
             self.assertEqual(workflow["17"]["class_type"], "KSamplerSelect")
             self.assertEqual(workflow["9"]["inputs"]["steps"], 20)
             self.assertNotIn("134", workflow)
+
+    def test_audio_mode_is_fixed_32_and_saves_only_audio(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            args = arguments(root, root / "audio.json", mode="audio", duration=5)
+            with mock.patch.object(prepare, "USER_CONFIG", root / "missing.json"):
+                workflow, metadata = prepare.build_workflow(args)
+            self.assertEqual(metadata["mode"], "audio")
+            self.assertEqual(workflow["104"]["inputs"]["width"], 32)
+            self.assertEqual(workflow["104"]["inputs"]["height"], 32)
+            self.assertEqual(workflow["104"]["inputs"]["length"], 124)
+            self.assertEqual(workflow["25"]["class_type"], "SaveAudio")
+            self.assertEqual(workflow["25"]["inputs"]["audio"], ["23", 0])
+            for video_node in ("10", "91", "92"):
+                self.assertNotIn(video_node, workflow)
+
+    def test_audio_mode_rejects_visual_size_and_reference_media(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            with mock.patch.object(prepare, "USER_CONFIG", root / "missing.json"):
+                with self.assertRaisesRegex(prepare.ConfigError, "fixed at 32x32"):
+                    prepare.build_workflow(
+                        arguments(root, root / "audio.json", mode="audio", width=64, height=64)
+                    )
+                with self.assertRaisesRegex(prepare.ConfigError, "prompt-only"):
+                    prepare.build_workflow(
+                        arguments(
+                            root,
+                            root / "audio.json",
+                            mode="audio",
+                            reference_audio=["voice.wav"],
+                        )
+                    )
 
     def test_explicit_turbo_flag_overrides_project_config(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

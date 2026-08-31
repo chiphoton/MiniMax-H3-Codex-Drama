@@ -53,7 +53,7 @@ If a user approves the Drama Producer plan and explicitly says later confirmatio
 
 ### Return behavior
 
-- `[return=true]` is synchronous from the user's perspective. The skill monitors the retained `prompt_id`, confirms the exact history entry, fetches the result, and returns the local video.
+- `[return=true]` is synchronous from the user's perspective. The skill monitors the retained `prompt_id`, confirms the exact history entry, fetches the result, and returns the local audio or video.
 - `[return=false]` is asynchronous. The skill submits exactly once, returns the `prompt_id`, and stops. It does not poll, fetch, or infer future success.
 - The wait ceiling comes from `runtime.wait_timeout_minutes` and cannot exceed 60 minutes. A timeout leaves the ComfyUI job running and returns its `prompt_id`.
 - To resume an asynchronous job, ask Codex to check or fetch that exact `prompt_id`; the skill must not silently resubmit it.
@@ -67,6 +67,7 @@ Prompt enhancement is opt-in. Any true alias for `prompt_enhance` or `pe` enable
 | T2V | `minimax-h3-text-to-video` |
 | I2V / first-last frame | `minimax-h3-frame-to-video` |
 | R2V / multimodal references | `minimax-h3-reference-to-video` |
+| Audio only / no references | `minimax-h3-audio` |
 
 Without the flag, a supplied prompt is treated as finished and is not silently rewritten, expanded, translated, or "improved." If the Adviser has already created the final prompt, enhancement is not applied a second time.
 
@@ -223,12 +224,12 @@ Prompt-time flags override these values for the current request.
 
 | Field | Used by | Role |
 |---|---|---|
-| `fl2va` | T2V, I2V | MiniMax H3 FL2VA diffusion model |
+| `fl2va` | T2V, I2V, Audio | MiniMax H3 FL2VA diffusion model |
 | `ref2va` | R2V | MiniMax H3 REF2VA diffusion model |
 | `text_encoder` | All modes | Compatible text encoder |
 | `video_vae` | All modes | MiniMax H3 video VAE |
 | `audio_vae` | All modes | MiniMax H3 audio VAE |
-| `turbo_lora` | Turbo T2V, I2V, R2V | MiniMax H3 Turbo LoRA; pinned default is `minimax_h3_turbo_v4_step600_ema.safetensors` |
+| `turbo_lora` | Turbo T2V, I2V, R2V, Audio | MiniMax H3 Turbo LoRA; pinned default is `minimax_h3_turbo_v4_step600_ema.safetensors` |
 | `qwen_checkpoint` | Qwen Image Edit | AIO checkpoint loaded through `CheckpointLoaderSimple` |
 | `qwen_lora` | Qwen Image Edit | Consistency LoRA loaded through `LoraLoaderModelOnly` |
 
@@ -247,8 +248,8 @@ FL2VA and REF2VA are not interchangeable. Turbo additionally requires the [`Comf
 
 | Field | Type / range | Applies to | Meaning |
 |---|---|---|---|
-| `width` | integer ≥ 32, multiple of 32 | All | Output width; must be supplied together with `height` |
-| `height` | integer ≥ 32, multiple of 32 | All | Output height; must be supplied together with `width` |
+| `width` | integer ≥ 32, multiple of 32 | Video modes | Output width; must be supplied together with `height` |
+| `height` | integer ≥ 32, multiple of 32 | Video modes | Output height; must be supplied together with `width` |
 | `duration_seconds` | number, `0 < n ≤ 15` | All | Requested clip duration; converted to H3's `17k+5` frame grid at 24 fps |
 | `seed` | integer ≥ 0 | All | Noise seed |
 | `filename_prefix` | string | All | ComfyUI output filename prefix |
@@ -258,7 +259,7 @@ FL2VA and REF2VA are not interchangeable. Turbo additionally requires the [`Comf
 | `denoise` | number, `0 ≤ n ≤ 1` | All | Denoise strength |
 | `ref_image_size` | `""`, `"match"`, or `"max"` | R2V only | Reference-image sizing policy; empty preserves the official default |
 
-If a field remains empty or `null`, the selected pinned workflow value is preserved. Width and height are atomic: setting only one is a configuration error. A sampler override, a non-`simple` scheduler, or a step count outside 4–8 is rejected while Turbo is active; use `[turbo=false]` to configure the original workflow instead.
+If a field remains empty or `null`, the selected pinned workflow value is preserved. Width and height are atomic: setting only one is a configuration error. Audio mode ignores configured generation size, fixes its disposable visual latent at 32x32, and rejects any non-32 explicit size. A sampler override, a non-`simple` scheduler, or a step count outside 4–8 is rejected while Turbo is active; use `[turbo=false]` to configure the original workflow instead.
 
 Explicit settings can also be stated naturally for one request:
 
@@ -270,17 +271,18 @@ Run this prompt at 768 × 1344 for 6 seconds with seed 42.
 
 ## 4. Automatic workflow routing
 
-The execution skill selects a bundled official workflow from the role of the supplied media:
+The execution skill selects a bundled workflow from the requested output and role of the supplied media:
 
 | Route | Select when | Media contract |
 |---|---|---|
+| Audio | Audio-only output is invented from text | Prompt only; fixed 32x32 proxy; no references |
 | T2V | No media controls the result | Prompt only |
 | I2V | An image is the literal first frame, optionally with an exact last frame | One first frame; optional one last frame |
 | R2V | Media controls identity, style, design, motion, camera, performance, voice, music, or rhythm | Up to 9 images, 3 videos, and 3 standalone audio files |
 
-For R2V, a reference video's frames and its paired audio are connected together. Give every reference a bounded role and state what it must not influence.
+For R2V, a reference video's frames and its paired audio are connected together. Give every reference a bounded role and state what it must not influence. Use R2V, not Audio, when a reference must control voice or sound.
 
-The plugin executes bundled `.api.json` graphs and retains each matching `.ui.json` graph for provenance and canvas loading. Arbitrary attached workflow JSON is rejected in this version.
+The plugin executes bundled `.api.json` graphs and retains each matching `.ui.json` graph for provenance and canvas loading. The Audio pair is a verified derivation of the H3 T2V graph: it fixes 32x32, removes video decode/mux/save, and saves the decoded native audio branch as FLAC. Arbitrary attached workflow JSON is rejected in this version.
 
 Each route has two pinned variants. Turbo is selected by default and inserts the Turbo LoRA and custom sampler at 6 steps. The original 20-step variant remains available with `[turbo=false]`, `[turbo=off]`, `[turbo=no]`, or another false alias.
 
@@ -327,11 +329,12 @@ The prompt specialists do not define additional bracket flags. State their creat
 | Skill | Useful settings to state |
 |---|---|
 | `minimax-h3-text-to-video` | Duration, aspect ratio, shot count, timed action, camera, look, dialogue/audio, constraints |
+| `minimax-h3-audio` | Duration, exact dialogue, speaker timbre and delivery, mood, acoustic setting, sound-event order, music/no-music, QC target |
 | `minimax-h3-frame-to-video` | Exact first frame, optional exact last frame, allowed motion, locked composition/identity, duration |
 | `minimax-h3-reference-to-video` | Asset-to-role mapping, forbidden influence, synchronization points, duration, aspect ratio |
 | `minimax-h3-video-editor` | Every requested change paired with what must remain unchanged |
 
-As a starting point, specialists recommend 5–15 second H3 clips, `768P` for iteration or `2K` for a final pass when the active workflow and hardware support it. T2V can use a fixed aspect ratio; I2V inherits the opening frame unless explicitly and compatibly handled by the executor.
+As a starting point, specialists recommend 5–15 second H3 clips, `768P` for video iteration or `2K` for a final video pass when the active workflow and hardware support it. T2V can use a fixed aspect ratio; I2V inherits the opening frame unless explicitly and compatibly handled by the executor. Audio remains fixed at 32x32 internally and returns 32 kHz stereo FLAC; verify transcript and peak/clipping behavior before delivery.
 
 ## 7. Common problems
 
@@ -340,6 +343,7 @@ As a starting point, specialists recommend 5–15 second H3 clips, `768P` for it
 | `[preview=true]` does nothing | Add `[load_workflow=true]`; preview is ignored in headless mode |
 | The wrong ComfyUI server is contacted | Make `connection.address` and the active MCP target identical |
 | Width/height configuration fails | Supply both; each must be a multiple of 32 |
+| Audio mode rejects size or media | Omit width/height and references; use R2V when a reference must control voice or sound |
 | Awaited run times out | The job is still running; keep and resume the returned `prompt_id` |
 | MiniMax H3 prompt changed unexpectedly | Use `[prompt_enhance=false]` or `[pe=false]`; H3 enhancement is opt-in by default |
 | Qwen edit prompt changed before submission | Omit the enhancement flag or set either name to a false alias; all other prompt text must pass through unchanged |
@@ -347,7 +351,7 @@ As a starting point, specialists recommend 5–15 second H3 clips, `768P` for it
 | Turbo validation reports missing nodes | Install/update **MiniMax-H3 Turbo** through ComfyUI-Manager, restart ComfyUI, or explicitly use `[turbo=false]` |
 | Turbo validation reports a missing LoRA | Put `minimax_h3_turbo_v4_step600_ema.safetensors` under `ComfyUI/models/loras/` or configure an installed compatible Turbo LoRA |
 | Turbo rejects sampler/scheduler/steps | Keep its custom sampler, `simple` scheduler, and 4–8 steps, or explicitly use `[turbo=false]` |
-| Attached custom workflow is rejected | This version executes only the bundled standard and Turbo T2V/I2V/R2V graphs |
+| Attached custom workflow is rejected | This version executes only the bundled standard and Turbo T2V/I2V/R2V/Audio graphs |
 | A URL reference is not downloaded | Supply a local file; URL downloading and sign-in are intentionally not automatic |
 
 For runtime procedure and diagnostic behavior, see [`references/runtime.md`](../skills/minimax-h3-comfyui/references/runtime.md).

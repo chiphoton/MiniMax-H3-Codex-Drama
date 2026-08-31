@@ -1,0 +1,4 @@
+interface:
+  display_name: "MiniMax H3 Audio"
+  short_description: "Generate fast native H3 audio through ComfyUI"
+  default_prompt: "Use $minimax-h3-audio to create a five-second documentary narration and run it through ComfyUI."

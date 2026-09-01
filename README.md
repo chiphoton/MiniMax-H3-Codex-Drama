@@ -55,7 +55,7 @@ codex plugin add privacy@chiphoton
 codex plugin list --json
 ```
 
-Start a new Codex task after installation so the bundled skills and MCP server are loaded. `h3style` remains a separate plugin namespace, so official skills appear as `h3style:<skill>` and can be refreshed without merging upstream files into the production plugin. The privacy utilities likewise remain separate as `privacy:compress-video` and `privacy:slice-video`.
+Start a new Codex task after installation so the bundled skills and MCP server are loaded. `h3style` remains a separate plugin namespace, so official skills appear as `h3style:<skill>` and can be refreshed without merging upstream files into the production plugin. The privacy utilities likewise remain separate as `privacy:compress-video`, `privacy:slice-video`, and `privacy:sanitize-metadata`.
 
 For a skills-only installation:
 
@@ -71,7 +71,7 @@ The skills-only CLI does not preserve plugin namespaces and may discover the nes
 
 ### 2. Prepare the local runtime
 
-Install Node.js and npm: the plugin launches the pinned `comfyui-mcp@0.49.3` package through `npx`, and its first launch may need network access to populate the npm cache. Run ComfyUI at `http://localhost:8188` with compatible MiniMax H3 models and nodes. Install FFmpeg/FFprobe for assembly and QC.
+Install Node.js and npm: the plugin launches the pinned `comfyui-mcp@0.49.3` package through `npx`, and its first launch may need network access to populate the npm cache. Run ComfyUI at `http://localhost:8188` with compatible MiniMax H3 models and nodes. Install FFmpeg/FFprobe for assembly and QC. The `privacy:sanitize-metadata` skill additionally needs local ExifTool and uses ImageMagick for `--deep` image sanitization.
 
 Turbo is enabled by default. Install [ComfyUI-MiniMax-H3-Turbo](https://github.com/Larryvrh/ComfyUI-MiniMax-H3-Turbo) through ComfyUI-Manager (search **MiniMax-H3 Turbo**) or under `ComfyUI/custom_nodes/`, restart ComfyUI, and place `minimax_h3_turbo_v4_step600_ema.safetensors` from the [Turbo LoRA repository](https://huggingface.co/larryvrh/MiniMax-H3-Turbo-Lora) in `ComfyUI/models/loras/`. Use `[turbo=false]` for the original workflow when those Turbo dependencies are intentionally unavailable.
 
@@ -188,15 +188,16 @@ The adviser selects at most one matching official style overlay, then still choo
 
 ## 🔒 Privacy-aware local media utilities
 
-The separate [`privacy`](plugins/privacy/README.md) plugin performs content-blind video operations through local FFmpeg/FFprobe commands:
+The separate [`privacy`](plugins/privacy/README.md) plugin performs content-blind image and video operations through local FFmpeg/FFprobe, ExifTool, and ImageMagick commands:
 
 | Skill | Role |
 |---|---|
 | [`privacy:compress-video`](plugins/privacy/skills/compress-video/SKILL.md) | Convert or compress private local video without viewing, hearing, transcribing, or uploading it |
 | [`privacy:slice-video`](plugins/privacy/skills/slice-video/SKILL.md) | Probe only narrow technical fields such as duration/FPS and split video into fixed-time pieces |
+| [`privacy:sanitize-metadata`](plugins/privacy/skills/sanitize-metadata/SKILL.md) | Audit safe category counts and remove EXIF, GPS, identity/device fields, timestamps, descriptions, and hidden previews without revealing values |
 
 > [!IMPORTANT]
-> For privacy-sensitive media, **do not drag and drop the file into the Codex chat box**. Attaching media can upload its contents to a cloud server. Keep the file on local disk and refer to it by its filename or, preferably, its absolute local path. This shares the path text with Codex, not the media bytes, and lets the privacy skill pass that path only to local FFmpeg/FFprobe helpers.
+> For privacy-sensitive media, **do not drag and drop the file into the Codex chat box**. Attaching media can upload its contents to a cloud server. Keep the file on local disk and refer to it by its filename or, preferably, its absolute local path. This shares the path text with Codex, not the media bytes, and lets the privacy skill pass that path only to local processing helpers.
 
 For example:
 
@@ -206,7 +207,13 @@ Use privacy:slice-video to split the private local video at
 "/Users/me/Videos/private-parts". Do not inspect its content.
 ```
 
-The privacy skills reject URLs and network media, prohibit previews and content analysis, expose only selected non-content technical data, suppress raw media diagnostics, and keep all generated files local. If the path name itself is sensitive, rename the file to a neutral name before referencing it.
+```text
+Use privacy:sanitize-metadata to remove private embedded metadata from the
+local image at "/Users/me/Pictures/private.jpg" and write a separate sanitized
+copy. Report category counts only; do not reveal metadata values.
+```
+
+The privacy skills reject URLs and network media, prohibit previews and content analysis, expose only selected non-content technical data or metadata category counts, suppress raw diagnostics, and keep all generated files local. Metadata sanitization does not remove faces, visible text, watermarks, speech, steganography, or other privacy information embedded in pixels or audio. If the path name itself is sensitive, rename the file to a neutral name before referencing it.
 
 ## 🔄 Compare and update installed skills
 

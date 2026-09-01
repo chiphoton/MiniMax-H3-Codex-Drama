@@ -1,0 +1,36 @@
+{
+  "name": "privacy",
+  "version": "0.1.0",
+  "description": "Compress and slice private local video with content-blind FFmpeg workflows.",
+  "author": {
+    "name": "chiphoton",
+    "url": "https://github.com/chiphoton"
+  },
+  "homepage": "https://github.com/chiphoton/MiniMax-H3-Codex-Drama/tree/main/plugins/privacy",
+  "repository": "https://github.com/chiphoton/MiniMax-H3-Codex-Drama",
+  "license": "MIT",
+  "keywords": [
+    "privacy",
+    "video",
+    "ffmpeg",
+    "compression",
+    "slicing",
+    "local-processing"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Privacy Media",
+    "shortDescription": "Process private video locally with FFmpeg",
+    "longDescription": "Compress, convert, probe technical properties, and split private videos through local FFmpeg commands while prohibiting the agent from viewing, hearing, transcribing, or uploading their content.",
+    "developerName": "chiphoton",
+    "category": "Creativity",
+    "capabilities": [
+      "Interactive",
+      "Write"
+    ],
+    "defaultPrompt": [
+      "Compress this private local video without inspecting its content.",
+      "Split this private local video into 10-second files without inspecting its content."
+    ]
+  }
+}

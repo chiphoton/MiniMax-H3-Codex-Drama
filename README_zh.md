@@ -45,16 +45,17 @@ MiniMax-H3 Drama 是一套 **Codex 优先的视频与原生音频制作插件**�
 
 ### 1. 安装到 Codex
 
-本仓库在同一个市场中提供两个 Codex 插件：包含 10 个技能与固定版本本地 ComfyUI MCP 连接的制作插件，以及独立的官方技能伴侣 `h3style`。先安装制作插件；如需官方工作流，再安装风格伴侣：
+本仓库在同一个市场中提供三个 Codex 插件：包含 10 个技能与固定版本本地 ComfyUI MCP 连接的制作插件、独立的官方技能伴侣 `h3style`，以及仅在本地处理媒体的 `privacy` 工具插件。先安装制作插件，再按需添加两个伴侣插件：
 
 ```bash
 codex plugin marketplace add chiphoton/MiniMax-H3-Codex-Drama
 codex plugin add minimax-h3-drama@chiphoton
 codex plugin add h3style@chiphoton
+codex plugin add privacy@chiphoton
 codex plugin list --json
 ```
 
-安装完成后请新建一个 Codex 任务，以加载插件内的技能和 MCP 服务。`h3style` 使用独立插件命名空间，因此官方技能会显示为 `h3style:<skill>`，上游更新不会混入制作插件的技能目录。
+安装完成后请新建一个 Codex 任务，以加载插件内的技能和 MCP 服务。`h3style` 使用独立插件命名空间，因此官方技能会显示为 `h3style:<skill>`，上游更新不会混入制作插件的技能目录。隐私工具同样保持独立，显示为 `privacy:compress-video` 和 `privacy:slice-video`。
 
 如果只需安装技能：
 
@@ -64,7 +65,7 @@ npx skills add chiphoton/MiniMax-H3-Codex-Drama --all -g -a codex -y
 
 仅安装技能不会安装插件内置的 ComfyUI MCP 连接。
 
-仅技能 CLI 不会保留插件命名空间，并可能把嵌套的 `h3style` 适配器识别为普通技能。如果需要保持 `h3style:<skill>` 的独立命名空间，请使用上面的 Codex 插件安装方式。
+仅技能 CLI 不会保留插件命名空间，并可能把嵌套的 `h3style` 适配器和 `privacy` 技能识别为普通技能。如果需要保持 `h3style:<skill>` 或 `privacy:<skill>` 的独立命名空间，请使用上面的 Codex 插件安装方式。
 
 > 从 `0.1.x` 升级？请先移除旧的 `minimax-h3-prompt-skills` 插件，再安装 `minimax-h3-drama`，避免同名专业技能被注册两次。
 
@@ -182,6 +183,28 @@ Qwen 技能仅支持显式调用。使用 `$qwen-image-edit` 运行编辑，或�
 | [`h3style:handdrawn-live-video-generator`](plugins/h3style/skills/handdrawn-live-video-generator/SKILL.md) | 真人空间与粗粝发光手绘动画融合 |
 
 Adviser 最多选择一个匹配的官方风格层，然后仍按素材实际用途选择本地 H3 输入工作流。运行 `python3 plugins/h3style/scripts/sync_upstream.py` 可刷新官方快照；来源 commit 与逐技能哈希记录在 [`upstream-lock.json`](plugins/h3style/upstream-lock.json) 中。
+
+## 🔒 隐私感知的本地媒体工具
+
+独立的 [`privacy`](plugins/privacy/README.md) 插件通过本地 FFmpeg/FFprobe 命令执行不读取内容语义的视频处理：
+
+| 技能 | 作用 |
+|---|---|
+| [`privacy:compress-video`](plugins/privacy/skills/compress-video/SKILL.md) | 在不观看、不收听、不转录、也不上传内容的前提下转换或压缩本地隐私视频 |
+| [`privacy:slice-video`](plugins/privacy/skills/slice-video/SKILL.md) | 仅探测时长、FPS 等少量技术字段，并按固定时长切分视频 |
+
+> [!IMPORTANT]
+> 对隐私敏感的媒体，**不要把文件直接拖放到 Codex 聊天框中**。以附件方式提交媒体可能会把文件内容上传到云服务器。请把文件保留在本地磁盘，只在提示词中写出文件名，最好使用绝对本地路径。这样只会把路径文本提供给 Codex，不会附加媒体字节；隐私技能只会把该路径交给本地 FFmpeg/FFprobe 辅助脚本。
+
+例如：
+
+```text
+使用 privacy:slice-video，把本地隐私视频
+"/Users/me/Videos/private.mp4" 按每段 10 秒切分到
+"/Users/me/Videos/private-parts"。不要检查视频内容。
+```
+
+隐私技能会拒绝 URL 和网络媒体，禁止预览与内容分析，只返回经过筛选的非内容技术数据，隐藏原始媒体诊断信息，并把所有生成文件保留在本地。如果路径名称本身也属于敏感信息，请先把文件改成不含隐私描述的中性名称。
 
 ## 🔄 比较并更新已安装技能
 

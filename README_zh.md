@@ -55,7 +55,7 @@ codex plugin add privacy@chiphoton
 codex plugin list --json
 ```
 
-安装完成后请新建一个 Codex 任务，以加载插件内的技能和 MCP 服务。`h3style` 使用独立插件命名空间，因此官方技能会显示为 `h3style:<skill>`，上游更新不会混入制作插件的技能目录。隐私工具同样保持独立，显示为 `privacy:compress-video` 和 `privacy:slice-video`。
+安装完成后请新建一个 Codex 任务，以加载插件内的技能和 MCP 服务。`h3style` 使用独立插件命名空间，因此官方技能会显示为 `h3style:<skill>`，上游更新不会混入制作插件的技能目录。隐私工具同样保持独立，显示为 `privacy:compress-video`、`privacy:slice-video` 和 `privacy:sanitize-metadata`。
 
 如果只需安装技能：
 
@@ -71,7 +71,7 @@ npx skills add chiphoton/MiniMax-H3-Codex-Drama --all -g -a codex -y
 
 ### 2. 准备本地运行环境
 
-请先安装 Node.js 和 npm：插件会通过 `npx` 启动固定版本的 `comfyui-mcp@0.49.3`，首次启动时可能需要联网以填充 npm 缓存。在 `http://localhost:8188` 运行 ComfyUI，并准备兼容的 MiniMax H3 模型与节点；安装 FFmpeg/FFprobe 以完成剪辑和 QC。
+请先安装 Node.js 和 npm：插件会通过 `npx` 启动固定版本的 `comfyui-mcp@0.49.3`，首次启动时可能需要联网以填充 npm 缓存。在 `http://localhost:8188` 运行 ComfyUI，并准备兼容的 MiniMax H3 模型与节点；安装 FFmpeg/FFprobe 以完成剪辑和 QC。`privacy:sanitize-metadata` 技能还需要本地 ExifTool；使用 `--deep` 深度清理图片时还会调用 ImageMagick。
 
 Turbo 默认启用。请通过 ComfyUI-Manager 搜索并安装 **MiniMax-H3 Turbo**，或把 [ComfyUI-MiniMax-H3-Turbo](https://github.com/Larryvrh/ComfyUI-MiniMax-H3-Turbo) 放入 `ComfyUI/custom_nodes/`，随后重启 ComfyUI；再从 [Turbo LoRA 仓库](https://huggingface.co/larryvrh/MiniMax-H3-Turbo-Lora) 下载 `minimax_h3_turbo_v4_step600_ema.safetensors` 并放入 `ComfyUI/models/loras/`。如果有意不安装这些依赖，可使用 `[turbo=false]` 切回原始工作流。
 
@@ -186,15 +186,16 @@ Adviser 最多选择一个匹配的官方风格层，然后仍按素材实际用
 
 ## 🔒 隐私感知的本地媒体工具
 
-独立的 [`privacy`](plugins/privacy/README.md) 插件通过本地 FFmpeg/FFprobe 命令执行不读取内容语义的视频处理：
+独立的 [`privacy`](plugins/privacy/README.md) 插件通过本地 FFmpeg/FFprobe、ExifTool 和 ImageMagick 命令执行不读取内容语义的图片与视频处理：
 
 | 技能 | 作用 |
 |---|---|
 | [`privacy:compress-video`](plugins/privacy/skills/compress-video/SKILL.md) | 在不观看、不收听、不转录、也不上传内容的前提下转换或压缩本地隐私视频 |
 | [`privacy:slice-video`](plugins/privacy/skills/slice-video/SKILL.md) | 仅探测时长、FPS 等少量技术字段，并按固定时长切分视频 |
+| [`privacy:sanitize-metadata`](plugins/privacy/skills/sanitize-metadata/SKILL.md) | 只汇报安全的分类计数，并在不显示具体值的前提下移除 EXIF、GPS、身份/设备字段、时间戳、描述与隐藏预览图 |
 
 > [!IMPORTANT]
-> 对隐私敏感的媒体，**不要把文件直接拖放到 Codex 聊天框中**。以附件方式提交媒体可能会把文件内容上传到云服务器。请把文件保留在本地磁盘，只在提示词中写出文件名，最好使用绝对本地路径。这样只会把路径文本提供给 Codex，不会附加媒体字节；隐私技能只会把该路径交给本地 FFmpeg/FFprobe 辅助脚本。
+> 对隐私敏感的媒体，**不要把文件直接拖放到 Codex 聊天框中**。以附件方式提交媒体可能会把文件内容上传到云服务器。请把文件保留在本地磁盘，只在提示词中写出文件名，最好使用绝对本地路径。这样只会把路径文本提供给 Codex，不会附加媒体字节；隐私技能只会把该路径交给本地处理脚本。
 
 例如：
 
@@ -204,7 +205,13 @@ Adviser 最多选择一个匹配的官方风格层，然后仍按素材实际用
 "/Users/me/Videos/private-parts"。不要检查视频内容。
 ```
 
-隐私技能会拒绝 URL 和网络媒体，禁止预览与内容分析，只返回经过筛选的非内容技术数据，隐藏原始媒体诊断信息，并把所有生成文件保留在本地。如果路径名称本身也属于敏感信息，请先把文件改成不含隐私描述的中性名称。
+```text
+使用 privacy:sanitize-metadata，移除本地图片
+"/Users/me/Pictures/private.jpg" 中嵌入的隐私元数据并写入一个独立副本。
+只汇报分类计数，不要显示任何元数据具体值。
+```
+
+隐私技能会拒绝 URL 和网络媒体，禁止预览与内容分析，只返回经过筛选的非内容技术数据或元数据分类计数，隐藏原始诊断信息，并把所有生成文件保留在本地。元数据清理不会移除画面中的人脸、可见文字、水印，也不会移除语音、隐写内容或其他嵌入像素/音频的隐私信息。如果路径名称本身也属于敏感信息，请先把文件改成不含隐私描述的中性名称。
 
 ## 🔄 比较并更新已安装技能
 

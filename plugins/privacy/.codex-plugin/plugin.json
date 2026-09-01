@@ -1,7 +1,7 @@
 {
   "name": "privacy",
-  "version": "0.1.0",
-  "description": "Compress and slice private local video with content-blind FFmpeg workflows.",
+  "version": "0.2.0",
+  "description": "Sanitize metadata and process private local images or videos with content-blind workflows.",
   "author": {
     "name": "chiphoton",
     "url": "https://github.com/chiphoton"
@@ -11,6 +11,9 @@
   "license": "MIT",
   "keywords": [
     "privacy",
+    "metadata",
+    "exif",
+    "image",
     "video",
     "ffmpeg",
     "compression",
@@ -20,8 +23,8 @@
   "skills": "./skills/",
   "interface": {
     "displayName": "Privacy Media",
-    "shortDescription": "Process private video locally with FFmpeg",
-    "longDescription": "Compress, convert, probe technical properties, and split private videos through local FFmpeg commands while prohibiting the agent from viewing, hearing, transcribing, or uploading their content.",
+    "shortDescription": "Process private media locally without content access",
+    "longDescription": "Audit and remove private metadata from local images or videos, compress or convert video, probe technical properties, and split video through local content-blind commands while prohibiting the agent from seeing raw metadata, viewing, hearing, transcribing, or uploading media content.",
     "developerName": "chiphoton",
     "category": "Creativity",
     "capabilities": [
@@ -30,7 +33,8 @@
     ],
     "defaultPrompt": [
       "Compress this private local video without inspecting its content.",
-      "Split this private local video into 10-second files without inspecting its content."
+      "Split this private local video into 10-second files without inspecting its content.",
+      "Remove private metadata from this local image or video without revealing its values."
     ]
   }
 }

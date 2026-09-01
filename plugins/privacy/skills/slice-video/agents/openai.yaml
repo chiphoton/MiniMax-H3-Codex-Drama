@@ -1,0 +1,3 @@
+interface:
+  display_name: "Slice Private Video"
+  short_description: "Local content-blind FFmpeg video slicing"

@@ -45,16 +45,17 @@ MiniMax-H3 Drama is a **Codex-first video and native-audio production plugin**, 
 
 ### 1. Install for Codex
 
-This repository publishes two Codex plugins from one marketplace: the ten-skill production plugin with a pinned local ComfyUI MCP connection, plus the separate `h3style` companion containing the official MiniMax-H3 skills. Install the production plugin, then add the official style companion when you want those workflows:
+This repository publishes three Codex plugins from one marketplace: the ten-skill production plugin with a pinned local ComfyUI MCP connection, the separate `h3style` companion containing the official MiniMax-H3 skills, and the local-only `privacy` media utility plugin. Install the production plugin, then add either companion when you need it:
 
 ```bash
 codex plugin marketplace add chiphoton/MiniMax-H3-Codex-Drama
 codex plugin add minimax-h3-drama@chiphoton
 codex plugin add h3style@chiphoton
+codex plugin add privacy@chiphoton
 codex plugin list --json
 ```
 
-Start a new Codex task after installation so the bundled skills and MCP server are loaded. `h3style` remains a separate plugin namespace, so official skills appear as `h3style:<skill>` and can be refreshed without merging upstream files into the production plugin.
+Start a new Codex task after installation so the bundled skills and MCP server are loaded. `h3style` remains a separate plugin namespace, so official skills appear as `h3style:<skill>` and can be refreshed without merging upstream files into the production plugin. The privacy utilities likewise remain separate as `privacy:compress-video` and `privacy:slice-video`.
 
 For a skills-only installation:
 
@@ -64,7 +65,7 @@ npx skills add chiphoton/MiniMax-H3-Codex-Drama --all -g -a codex -y
 
 The skills-only route does not install the bundled ComfyUI MCP connection.
 
-The skills-only CLI does not preserve plugin namespaces and may discover the nested `h3style` adapters as ordinary skills. Use the Codex plugin installation above when the `h3style:<skill>` separation matters.
+The skills-only CLI does not preserve plugin namespaces and may discover the nested `h3style` adapters and `privacy` skills as ordinary skills. Use the Codex plugin installation above when the `h3style:<skill>` or `privacy:<skill>` separation matters.
 
 > Migrating from `0.1.x`? Remove the old `minimax-h3-prompt-skills` plugin before installing `minimax-h3-drama` so the specialist skills are not registered twice.
 
@@ -184,6 +185,28 @@ The separate [`h3style`](plugins/h3style/README.md) plugin pins all nine folders
 | [`h3style:handdrawn-live-video-generator`](plugins/h3style/skills/handdrawn-live-video-generator/SKILL.md) | Live action fused with rough glowing hand-drawn motion |
 
 The adviser selects at most one matching official style overlay, then still chooses the correct local H3 input route. Refresh the pinned official snapshot with `python3 plugins/h3style/scripts/sync_upstream.py`; provenance and per-skill hashes are recorded in [`upstream-lock.json`](plugins/h3style/upstream-lock.json).
+
+## 🔒 Privacy-aware local media utilities
+
+The separate [`privacy`](plugins/privacy/README.md) plugin performs content-blind video operations through local FFmpeg/FFprobe commands:
+
+| Skill | Role |
+|---|---|
+| [`privacy:compress-video`](plugins/privacy/skills/compress-video/SKILL.md) | Convert or compress private local video without viewing, hearing, transcribing, or uploading it |
+| [`privacy:slice-video`](plugins/privacy/skills/slice-video/SKILL.md) | Probe only narrow technical fields such as duration/FPS and split video into fixed-time pieces |
+
+> [!IMPORTANT]
+> For privacy-sensitive media, **do not drag and drop the file into the Codex chat box**. Attaching media can upload its contents to a cloud server. Keep the file on local disk and refer to it by its filename or, preferably, its absolute local path. This shares the path text with Codex, not the media bytes, and lets the privacy skill pass that path only to local FFmpeg/FFprobe helpers.
+
+For example:
+
+```text
+Use privacy:slice-video to split the private local video at
+"/Users/me/Videos/private.mp4" into 10-second files under
+"/Users/me/Videos/private-parts". Do not inspect its content.
+```
+
+The privacy skills reject URLs and network media, prohibit previews and content analysis, expose only selected non-content technical data, suppress raw media diagnostics, and keep all generated files local. If the path name itself is sensitive, rename the file to a neutral name before referencing it.
 
 ## 🔄 Compare and update installed skills
 

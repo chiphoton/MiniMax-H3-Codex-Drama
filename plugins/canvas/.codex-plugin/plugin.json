@@ -1,0 +1,38 @@
+{
+  "name": "canvas",
+  "version": "0.1.0",
+  "description": "A local web workflow canvas with Codex Plan text/image defaults and an environment and usage adviser.",
+  "author": {
+    "name": "chiphoton",
+    "url": "https://github.com/chiphoton"
+  },
+  "homepage": "https://github.com/chiphoton/MiniMax-H3-Codex-Drama",
+  "repository": "https://github.com/chiphoton/MiniMax-H3-Codex-Drama",
+  "license": "MIT",
+  "keywords": [
+    "canvas",
+    "codex",
+    "video",
+    "comfyui",
+    "workflow"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Canvas",
+    "shortDescription": "Visual workflows with Codex Plan text and images",
+    "longDescription": "Run a local infinite canvas for video-production workflows, use Codex Plan for text and image generation, and get AI guidance for installation, provider setup, and canvas operation.",
+    "developerName": "chiphoton",
+    "category": "Creativity",
+    "capabilities": [
+      "Interactive",
+      "Read",
+      "Write"
+    ],
+    "defaultPrompt": [
+      "Set up Canvas and open it in Codex.",
+      "Help me build a video workflow on the canvas.",
+      "Diagnose my Canvas provider connection."
+    ],
+    "brandColor": "#4F7CFF"
+  }
+}

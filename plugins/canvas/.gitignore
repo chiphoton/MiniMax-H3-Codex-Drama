@@ -1,0 +1,19 @@
+# Dependencies and generated artifacts.
+node_modules/
+dist/
+*.log
+coverage/
+*.tsbuildinfo
+
+# Local Canvas data, storage migrations, account cache, and connections.
+.canvas-data*/
+.canvas-copy-*/
+.canvas-storage.json
+.canvas-storage.json.*.tmp
+provider-settings.json
+codex-models.json
+
+# Environment overrides; keep shareable templates.
+.env
+.env.*
+!.env.example

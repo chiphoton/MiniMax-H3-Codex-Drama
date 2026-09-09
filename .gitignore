@@ -7,3 +7,8 @@
 .config/comfy-config.json
 inputs/
 outputs/
+
+# Local credentials and environment overrides; keep shareable templates.
+.env
+.env.*
+!.env.example

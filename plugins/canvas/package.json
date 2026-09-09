@@ -1,0 +1,31 @@
+{
+  "name": "codex-drama-canvas",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local workflow canvas and Codex Plan adviser for Codex Drama",
+  "type": "module",
+  "engines": { "node": "^22.19.0 || >=24.0.0" },
+  "scripts": {
+    "setup": "node scripts/setup.mjs",
+    "doctor": "node scripts/doctor.mjs",
+    "build": "node scripts/build-client.mjs",
+    "start": "node scripts/serve.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test test/*.test.js",
+    "check": "npm run build && npm run typecheck && npm test"
+  },
+  "dependencies": {
+    "@openai/codex-sdk": "0.152.1",
+    "@xyflow/react": "12.11.5",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "24.3.0",
+    "@types/react": "18.3.24",
+    "@types/react-dom": "18.3.7",
+    "esbuild": "0.28.2",
+    "typescript": "6.0.3"
+  },
+  "license": "MIT"
+}

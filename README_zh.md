@@ -41,17 +41,25 @@ MiniMax-H3 Drama 是一套 **Codex 优先的视频与原生音频制作插件**�
 
 <p align="center"><strong><a href="examples/README_zh.md">在示例画廊查看更多剧情案例</a></strong></p>
 
+<p align="center">
+  <br>
+  <img src="docs/canvas/canvas-demo.png" alt="Codex Drama 画布连接草图、图像、文本和视频工作流" width="100%">
+</p>
+
+<p align="center"><strong><a href="plugins/canvas/">[NEW] 画布驱动的可视化工作流。</a></strong></p>
+
 ## 🚀 快速开始
 
 ### 1. 安装到 Codex
 
-本仓库在同一个市场中提供三个 Codex 插件：包含 10 个技能与固定版本本地 ComfyUI MCP 连接的制作插件、独立的官方技能伴侣 `h3style`，以及仅在本地处理媒体的 `privacy` 工具插件。先安装制作插件，再按需添加两个伴侣插件：
+本仓库在同一个市场中提供四个 Codex 插件：包含 10 个技能与固定版本本地 ComfyUI MCP 连接的制作插件、官方技能伴侣 `h3style`、本地媒体工具 `privacy`，以及独立的 [`canvas`](plugins/canvas/README.md) 网页工作流引擎。先安装制作插件，再按需添加伴侣插件：
 
 ```bash
 codex plugin marketplace add chiphoton/MiniMax-H3-Codex-Drama
 codex plugin add minimax-h3-drama@chiphoton
 codex plugin add h3style@chiphoton
 codex plugin add privacy@chiphoton
+codex plugin add canvas@chiphoton
 codex plugin list --json
 ```
 
@@ -165,6 +173,12 @@ $minimax-h3-adviser
 | 🪄 | [`qwen-image-edit`](skills/qwen-image-edit/SKILL.md) | 运行固定的一/双参考图 Qwen 一致性编辑工作流 |
 
 Qwen 技能仅支持显式调用。使用 `$qwen-image-edit` 运行编辑，或使用 `$qwen-image-edit help` 查看完整的 [ComfyUI 节点与模型安装指南](skills/qwen-image-edit/references/comfyui-workflow-install.md)。默认情况下，提示词载荷会原样写入工作流。所有布尔方括号控制项均采用[技能参数配置](docs/skill-config.md)中记录的统一别名。
+
+## 🧩 Canvas 工作流伴侣
+
+独立的 [`canvas`](plugins/canvas/README.md) 插件把 DeepSeek-Harness-Video-Director 的网页画布迁移到 `plugins/canvas/` 目录，无需 DeepSeek Harness 即可运行。TEXT WORKFLOW 和 IMAGE WORKFLOW 默认选择 **Codex Plan**，视频与音频使用 ComfyUI。每个工程保留画布、素材、任务历史与独立的 Codex 咨询对话。Codex 模型及变体从本机已登录的 CLI 同步，并使用各模型的默认推理强度；快速模式（优先处理）仅在设置中提供，默认关闭。
+
+使用 `$canvas-adviser` 检查环境、安装锁定版本的 Node 依赖、启动服务并学习使用画布。开发时运行 `node plugins/canvas/scripts/setup.mjs`，再运行 `npm start --prefix plugins/canvas`，打开 `http://127.0.0.1:8765`。未发布版本的本地市场安装、持久化目录与后端配置见 [Canvas 说明](plugins/canvas/README.md)。
 
 ## 🎨 官方 H3 风格伴侣
 

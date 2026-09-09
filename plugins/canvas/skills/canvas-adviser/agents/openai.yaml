@@ -1,0 +1,4 @@
+interface:
+  display_name: "Canvas adviser"
+  short_description: "Install, launch, and use the Codex workflow canvas"
+  default_prompt: "Use $canvas-adviser to check my environment and open the workflow canvas."

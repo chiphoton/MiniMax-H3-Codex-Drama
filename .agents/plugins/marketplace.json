@@ -40,6 +40,18 @@
         "authentication": "ON_INSTALL"
       },
       "category": "Productivity"
+    },
+    {
+      "name": "canvas",
+      "source": {
+        "source": "local",
+        "path": "./plugins/canvas"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Creativity"
     }
   ]
 }

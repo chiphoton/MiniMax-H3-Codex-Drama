@@ -41,17 +41,25 @@ MiniMax-H3 Drama is a **Codex-first video and native-audio production plugin**, 
 
 <p align="center"><strong><a href="examples/README.md">See More Drama Examples in Gallery</a></strong></p>
 
+<p align="center">
+  <br>
+  <img src="docs/canvas/canvas-demo.png" alt="Codex Drama canvas connecting sketch, image, text, and video workflows" width="100%">
+</p>
+
+<p align="center"><strong><a href="plugins/canvas/">[NEW] Canvas-driven visual workflow.</a></strong></p>
+
 ## 🚀 Quick start
 
 ### 1. Install for Codex
 
-This repository publishes three Codex plugins from one marketplace: the ten-skill production plugin with a pinned local ComfyUI MCP connection, the separate `h3style` companion containing the official MiniMax-H3 skills, and the local-only `privacy` media utility plugin. Install the production plugin, then add either companion when you need it:
+This repository provides four Codex plugins from one marketplace: the ten-skill production plugin with a pinned local ComfyUI MCP connection, the `h3style` official MiniMax-H3 skill companion, the local `privacy` media utilities, and the separate [`canvas`](plugins/canvas/README.md) web workflow engine. Install the production plugin, then add the companions you need:
 
 ```bash
 codex plugin marketplace add chiphoton/MiniMax-H3-Codex-Drama
 codex plugin add minimax-h3-drama@chiphoton
 codex plugin add h3style@chiphoton
 codex plugin add privacy@chiphoton
+codex plugin add canvas@chiphoton
 codex plugin list --json
 ```
 
@@ -167,6 +175,12 @@ See [skill configuration](docs/skill-config.md) for every control flag, configur
 | 🪄 | [`qwen-image-edit`](skills/qwen-image-edit/SKILL.md) | Run the pinned one/two-reference Qwen consistency-edit workflow |
 
 The Qwen skill is explicit-only. Invoke `$qwen-image-edit` to run an edit, or `$qwen-image-edit help` to show its complete [ComfyUI dependency and model guide](skills/qwen-image-edit/references/comfyui-workflow-install.md). Its default path copies the prompt payload directly into the workflow. All boolean bracket controls share the aliases documented in [skill configuration](docs/skill-config.md).
+
+## 🧩 Canvas workflow companion
+
+The separate [`canvas`](plugins/canvas/README.md) plugin runs a local web canvas migrated from DeepSeek-Harness-Video-Director. All engine sources live under `plugins/canvas/`; it runs without DeepSeek Harness. Text and image vd-workflow nodes default to **Codex Plan**, while video and audio use ComfyUI. Projects retain their canvas, media, job history, and a separate Codex adviser conversation. Codex models and variants sync from the signed-in CLI and use their default effort; optional Fast (priority) is available only in Settings and starts off.
+
+Use `$canvas-adviser` to check prerequisites, install the locked Node dependencies, launch the server, and learn the canvas controls. For development, run `node plugins/canvas/scripts/setup.mjs`, then `npm start --prefix plugins/canvas`, and open `http://127.0.0.1:8765`. The [Canvas README](plugins/canvas/README.md) covers local marketplace installation before publication, persistent storage, provider configuration, and usage.
 
 ## 🎨 Official H3 style companion
 

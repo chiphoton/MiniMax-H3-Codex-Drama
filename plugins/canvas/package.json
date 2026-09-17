@@ -1,6 +1,6 @@
 {
   "name": "codex-drama-canvas",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "Local workflow canvas and Codex Plan adviser for Codex Drama",
   "type": "module",
@@ -25,6 +25,7 @@
     "@types/react": "18.3.24",
     "@types/react-dom": "18.3.7",
     "esbuild": "0.28.2",
+    "jsdom": "29.1.1",
     "typescript": "6.0.3"
   },
   "license": "MIT"

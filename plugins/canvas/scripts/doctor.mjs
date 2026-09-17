@@ -33,7 +33,7 @@ if (cli.status === 0) {
 }
 for (const command of ['ffmpeg', 'ffprobe']) {
   const probe = spawnSync(command, ['-version'], { encoding: 'utf8', timeout: 5000 })
-  check(command, probe.status === 0 ? 'ok' : 'optional', probe.status === 0 ? 'available' : 'Needed for local finishing with the Drama production plugin')
+  check(command, probe.status === 0 ? 'ok' : 'optional', probe.status === 0 ? 'available' : command === 'ffprobe' ? 'Needed for video metadata in Canvas previews' : 'Needed for local finishing with the Drama production plugin')
 }
 if (process.argv.includes('--probe')) {
   const targets = [['Canvas server', process.env.CANVAS_URL || `http://127.0.0.1:${process.env.CANVAS_PORT || DEFAULT_PORT}`, '/health'], ['ComfyUI', process.env.COMFYUI_URL || 'http://127.0.0.1:8188', '/system_stats']]

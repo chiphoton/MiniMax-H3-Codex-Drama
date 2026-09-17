@@ -8,6 +8,7 @@ import type {
   DirectorNode,
   DirectorNodeData,
   DirectorSnapshot,
+  GalleryProject,
   VdRun,
   MediaKind,
   VdNodeDefinitionDescriptor,
@@ -19,6 +20,7 @@ import type {
   SessionBinding,
   SketchDocument,
   VideoProject,
+  TaskProject,
   ComfyWorkflowDescriptor,
   ComfyWorkflowKind,
   VdRunMode,
@@ -46,6 +48,7 @@ import {
 import { codexModelForNode, effectiveOllamaModel, ollamaModelSupports } from './model-choices'
 import { DEFAULT_TEXT_WORKFLOW_SYSTEM_PROMPT } from './default-system-prompt'
 import { planVdRun, validateTriggerNodeConnections } from './workflow-runner'
+import { ProjectDraftCache } from './project-drafts'
 
 const CHANNEL = '/video-director'
 const JOB_POLL_MS = 1_400
@@ -72,7 +75,6 @@ interface ProjectHistoryState {
 
 interface ActiveNodeRun {
   projectId: string
-  projectGeneration: number
   clientRunId: string
   seedStateAtSubmission?: {
     seed: number | undefined
@@ -108,6 +110,7 @@ interface ActiveRunCompletion {
 }
 
 interface NodeRunOptions {
+  projectId?: string
   graph?: DirectorGraph
   sourceRevision?: number
   workflowRunId?: string
@@ -167,6 +170,7 @@ function emptySnapshot(): DirectorSnapshot {
     error: null,
     providerChecks: {},
     workflowRuns: [],
+    taskProjects: [],
   }
 }
 
@@ -321,6 +325,8 @@ function archivedGraph(graph: DirectorGraph): DirectorGraph {
       delete data.progress
       delete data.jobId
       delete data.error
+      delete data.runStartedAt
+      delete data.runCompletedAt
       return { ...node, data }
     }),
   }
@@ -341,6 +347,8 @@ function clearedRuntimeData(data: DirectorNodeData, suppressPreview = false): Di
     outputSeed: _outputSeed,
     previewCleared: _previewCleared,
     status: _status,
+    runStartedAt: _runStartedAt,
+    runCompletedAt: _runCompletedAt,
     ...rest
   } = data
   return {
@@ -779,15 +787,22 @@ function combinedSinkPayload(
   const results = payloads
     .map(({ payload }) => payload.result)
     .filter(value => value !== undefined)
+  const completed = payloads.every(({ node }) => node.data.frozen === true
+    || node.data.kind.startsWith('load-')
+    || node.data.status === undefined || node.data.status === 'completed')
+  const starts = payloads.map(({ node }) => node.data.runStartedAt).filter((value): value is string => value !== undefined).sort()
+  const finishes = payloads.map(({ node }) => node.data.runCompletedAt).filter((value): value is string => value !== undefined).sort()
   return {
     asset: assets[0],
     assets: assets.length === 0 ? undefined : assets,
     text: texts.length === 0 ? undefined : texts.join('\n\n'),
     mediaKind: assets[0]?.kind ?? (texts.length > 0 ? 'text' : undefined),
     result: results.length === 0 ? undefined : results.length === 1 ? results[0] : results,
-    status: 'completed',
-    phase: 'completed',
-    progress: 1,
+    status: completed ? 'completed' : 'idle',
+    phase: completed ? 'completed' : undefined,
+    progress: completed ? 1 : undefined,
+    runStartedAt: completed ? starts[0] : undefined,
+    runCompletedAt: completed ? finishes.at(-1) : undefined,
     derivedFrom: payloads.length === 1 ? payloads[0].node.id : undefined,
   }
 }
@@ -806,6 +821,8 @@ function clearedSinkData(data: DirectorNodeData): DirectorNodeData {
     jobId: _jobId,
     outputSeed: _outputSeed,
     previewCleared: _previewCleared,
+    runStartedAt: _runStartedAt,
+    runCompletedAt: _runCompletedAt,
     ...rest
   } = data
   return { ...rest, status: 'idle' }
@@ -834,7 +851,7 @@ const EXECUTABLE_NODE_KINDS = new Set<DirectorNodeData['kind']>([
 function duplicatedNodeData(data: DirectorNodeData, patch: Partial<DirectorNodeData>): DirectorNodeData {
   const merged = { ...data, ...patch }
   if (merged.kind === 'preview' || merged.kind === 'save') return clearedSinkData(merged)
-  if (!EXECUTABLE_NODE_KINDS.has(merged.kind)) return { ...merged, status: 'idle', jobId: undefined, error: undefined }
+  if (!EXECUTABLE_NODE_KINDS.has(merged.kind)) return { ...merged, status: 'idle', jobId: undefined, error: undefined, runStartedAt: undefined, runCompletedAt: undefined }
   const {
     asset: _asset,
     assets: _assets,
@@ -847,6 +864,8 @@ function duplicatedNodeData(data: DirectorNodeData, patch: Partial<DirectorNodeD
     jobId: _jobId,
     derivedFrom: _derivedFrom,
     outputSeed: _outputSeed,
+    runStartedAt: _runStartedAt,
+    runCompletedAt: _runCompletedAt,
     ...rest
   } = merged
   return { ...rest, status: 'idle' }
@@ -893,7 +912,6 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
   private savePromise: Promise<void> | null = null
   private editVersion = 0
   private savedState: ProjectHistoryState | null = null
-  private openedProject: { id: string; state: ProjectHistoryState } | null = null
   private readonly undoStack: ProjectHistoryState[] = []
   private readonly redoStack: ProjectHistoryState[] = []
   private historyTransaction: { projectId: string; before: ProjectHistoryState } | null = null
@@ -903,13 +921,24 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
   private readonly jobTimers = new Map<string, ReturnType<typeof setTimeout>>()
   private readonly activeRuns = new Map<string, ActiveNodeRun>()
   private readonly vdRunControllers = new Map<string, AbortController>()
-  private vdRunTail: Promise<void> = Promise.resolve()
+  private readonly vdRunTails = new Map<string, Promise<void>>()
+  private readonly projectCache = new Map<string, { project: VideoProject; dirty: boolean; savedState: ProjectHistoryState | null }>()
+  private taskVersion = 0
+  private taskRequestVersion = 0
+  private readonly activeTriggers = new Map<string, AbortController>()
   private readonly vdRunSnapshots = new Map<string, Pick<VideoProject, 'name' | 'graph' | 'settings'>>()
   private readonly vdRunWrites = new Map<string, Promise<unknown>>()
   private readonly modelRefreshVersions = new Map<string, number>()
   private nodeClipboard: { projectId: string; nodes: DirectorNode[]; edges: DirectorEdge[] } | null = null
+  private readonly drafts: ProjectDraftCache
+  private reorderVersion = 0
 
-  constructor(private readonly ctx: ClientContext) {}
+  constructor(private readonly ctx: ClientContext) {
+    this.drafts = new ProjectDraftCache(
+      (projectId, draft) => this.rpc('projects/draft', { projectId, draft }),
+      error => { if (!this.disposed) this.patch({ error: `Could not cache workflow changes: ${errorMessage(error)}` }) },
+    )
+  }
 
   getSnapshot = (): DirectorSnapshot => this.snapshot
 
@@ -928,8 +957,13 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
         this.rpc<{ nodeDefinitions: VdNodeDefinitionDescriptor[] }>('nodes/list', {})
           .catch(() => ({ nodeDefinitions: [] })),
       ])
+      const recoveredProjects = projects.projects.map(project => {
+        const entry = this.drafts.recover(project.id)
+        return entry === undefined ? project : { ...project, name: entry.draft?.name ?? project.name,
+          nodeCount: entry.draft?.graph.nodes.length ?? project.nodeCount, unsaved: entry.draft !== null || project.hasSavedVersion === false }
+      })
       this.patch({
-        projects: projects.projects,
+        projects: recoveredProjects,
         providers: providers.providers,
         workflows: workflows.workflows,
         nodeDefinitions: nodes.nodeDefinitions,
@@ -943,6 +977,8 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
       const currentSession = this.ctx.sessions.list.getSnapshot().current
       const selected = projects.projects.find(project => project.sessionId === currentSession) ?? projects.projects[0]
       if (selected !== undefined) await this.loadProject(selected.id, false)
+      void this.refreshTasks().catch(() => {})
+      void this.drafts.flush().catch(error => this.patch({ error: errorMessage(error) }))
     } catch (error) {
       this.patch({ phase: 'error', error: errorMessage(error) })
     }
@@ -952,14 +988,17 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
 
   close = (): void => { this.patch({ open: false }) }
 
-  private stopVdRunSchedulers(message = 'vd-run stopped because the project changed.'): void {
+  private stopVdRunSchedulers(message: string): void {
     for (const controller of this.vdRunControllers.values()) controller.abort(message)
     this.vdRunControllers.clear()
+    for (const controller of this.activeTriggers.values()) controller.abort(message)
+    this.activeTriggers.clear()
     for (const active of this.activeRuns.values()) active.completion?.reject(new Error(message))
   }
 
   dispose = (): void => {
     this.disposed = true
+    this.drafts.dispose()
     for (const timer of this.jobTimers.values()) clearTimeout(timer)
     this.jobTimers.clear()
     this.stopVdRunSchedulers('vd-run scheduler was disposed.')
@@ -971,16 +1010,15 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
     if (this.snapshot.phase === 'loading') {
       throw new Error('Wait for the current project transition to finish before creating another project.')
     }
-    if (this.snapshot.dirty || this.snapshot.saving) {
-      throw new Error('Save or discard the current project changes before creating another project.')
-    }
+    if (this.snapshot.saving) throw new Error('Wait for the current save to finish before creating another project.')
+    await this.cacheBeforeSwitch()
     const transition = ++this.transitionVersion
     this.patch({ phase: 'loading', error: null, conflict: false })
     try {
       const sessionId = await this.ctx.sessions.create()
       const binding = this.requireSessionBinding(sessionId)
       await this.renameSession(binding, name)
-      const { project } = await this.rpc<{ project: VideoProject }>('projects/create', { name, sessionId })
+      const { project } = await this.rpc<{ project: VideoProject }>('projects/create', { name, sessionId, unsaved: true })
       if (transition !== this.transitionVersion) return
       const projects = [
         { ...project, nodeCount: project.graph.nodes.length },
@@ -988,22 +1026,19 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
       ]
       this.baseProject = structuredClone(project)
       this.savedState = this.historyState(project)
-      this.openedProject = { id: project.id, state: this.historyState(project) }
       this.resetHistory()
       this.editVersion = 0
       this.projectGeneration += 1
-      this.stopVdRunSchedulers()
-      this.activeRuns.clear()
       this.ctx.sessions.open(project.sessionId)
-      this.patch({ project, projects, dirty: false, saving: false, phase: 'ready', workflowRuns: [] })
+      this.patch({ project, projects, dirty: project.hasSavedVersion === false, saving: false, phase: 'ready' })
     } catch (error) {
       if (transition === this.transitionVersion) this.patch({ phase: 'error', error: errorMessage(error) })
       throw error
     }
   }
 
-  async exportProject(): Promise<ExportedProjectArchive> {
-    const project = structuredClone(this.requireProject())
+  async exportProject(projectId = this.requireProject().id): Promise<ExportedProjectArchive> {
+    const project = await this.projectForAction(projectId)
     try {
       const archive = await archiveForProject(project, { portable: true })
       return {
@@ -1025,19 +1060,19 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
       .concat(this.snapshot.workflowRuns.filter(run => !runs.some(saved => saved.id === run.id))) })
   }
 
-  private async submittedVdWorkflow(runId: string): Promise<Pick<VideoProject, 'name' | 'graph' | 'settings'>> {
+  private async submittedVdWorkflow(runId: string, projectId = this.runProjectId(runId)): Promise<Pick<VideoProject, 'name' | 'graph' | 'settings'>> {
     const cached = this.vdRunSnapshots.get(runId)
     if (cached !== undefined) return structuredClone(cached)
     const { run } = await this.rpc<{ run: VdRun & { snapshot: Pick<VideoProject, 'name' | 'graph' | 'settings'> } }>(
-      'vd-runs/get', { projectId: this.requireProject().id, runId },
+      'vd-runs/get', { projectId, runId },
     )
     return run.snapshot
   }
 
-  async openVdWorkflow(runId: string): Promise<void> {
+  async openVdWorkflow(runId: string, projectId = this.runProjectId(runId)): Promise<void> {
     try {
-      const projectId = this.requireProject().id
-      const submitted = await this.submittedVdWorkflow(runId)
+      const submitted = await this.submittedVdWorkflow(runId, projectId)
+      await this.selectProject(projectId)
       if (this.snapshot.project?.id !== projectId) return
       const project = this.requireProject()
       // Opening is an ordinary undoable canvas edit. Execution uses its own graph.
@@ -1048,10 +1083,10 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
     }
   }
 
-  async exportVdWorkflow(runId: string): Promise<ExportedProjectArchive> {
+  async exportVdWorkflow(runId: string, projectId = this.runProjectId(runId)): Promise<ExportedProjectArchive> {
     try {
-      const project = this.requireProject()
-      const submitted = await this.submittedVdWorkflow(runId)
+      const project = await this.projectForAction(projectId)
+      const submitted = await this.submittedVdWorkflow(runId, projectId)
       const archive = await archiveForProject({ ...project, ...submitted })
       return { filename: projectArchiveFilename(`${submitted.name}-${runId.slice(0, 8)}`), text: `${JSON.stringify(archive, null, 2)}\n` }
     } catch (error) {
@@ -1060,8 +1095,8 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
     }
   }
 
-  async duplicateProject(): Promise<void> {
-    const project = structuredClone(this.requireProject())
+  async duplicateProject(projectId = this.requireProject().id): Promise<void> {
+    const project = await this.projectForAction(projectId)
     const usedNames = new Set(this.snapshot.projects.map(value => value.name.toLocaleLowerCase()))
     let copyNumber = 1
     let name = ''
@@ -1101,7 +1136,6 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
   async openExample(id: string): Promise<void> {
     try {
       if (this.snapshot.saving || this.snapshot.phase === 'loading') throw new Error('Wait for the current project operation before opening an example.')
-      if (this.snapshot.dirty) await this.saveProject()
       await this.installProjectArchive(archive => {
         const usedNames = new Set(this.snapshot.projects.map(project => project.name.toLocaleLowerCase()))
         let name = archive.project.name
@@ -1173,51 +1207,156 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
     if (this.snapshot.saving) {
       throw new Error('Wait for the current save to finish before switching projects.')
     }
-    if (this.snapshot.dirty && options.discard !== true) {
-      throw new Error('Save or discard the current project changes before switching projects.')
-    }
-    if (this.snapshot.conflict) throw new Error('Resolve the save conflict before switching projects.')
+    if (options.discard === true) await this.discardChanges()
+    await this.cacheBeforeSwitch()
     await this.loadProject(projectId, true)
   }
 
-  async discardChanges(): Promise<void> {
-    const project = this.snapshot.project
-    if (project === null || this.snapshot.saving || this.snapshot.phase === 'loading') return
-    await this.loadProject(project.id, false)
+  private async cacheBeforeSwitch(): Promise<void> {
+    this.patch({ phase: 'loading' })
+    try { await this.drafts.flush() }
+    catch (error) { this.patch({ phase: 'ready', error: errorMessage(error) }); throw error }
   }
 
-  /** Restore this opening's workflow snapshot locally; explicit saves keep the restore point. */
-  restoreOpenedProject(): void {
+  async flushDrafts(): Promise<void> { await this.drafts.flush() }
+
+  private runKey(projectId: string, nodeId: string): string { return `${projectId}:${nodeId}` }
+
+  private cachedProject(projectId?: string): VideoProject | undefined {
+    return this.snapshot.project !== null && this.snapshot.project.id === projectId ? this.snapshot.project : this.projectCache.get(projectId ?? '')?.project
+  }
+
+  private requireRunProject(projectId: string): VideoProject {
+    const project = this.cachedProject(projectId)
+    if (project === undefined) throw new Error(`Workflow ${projectId} is not loaded.`)
+    return project
+  }
+
+  private hasProjectWork(projectId: string): boolean {
+    return [...this.activeRuns.values()].some(run => run.projectId === projectId)
+      || [...this.activeTriggers.keys()].some(key => key.startsWith(`${projectId}:`))
+      || this.snapshot.workflowRuns.some(run => run.projectId === projectId && this.vdRunControllers.has(run.id))
+  }
+
+  private withTaskProject(project: VideoProject): TaskProject[] {
+    const existing = this.snapshot.taskProjects.find(row => row.id === project.id)
+    const row: TaskProject = { id: project.id, name: project.name,
+      nodes: project.graph.nodes.map(node => ({ id: node.id, title: node.data.title })),
+      jobs: project.jobs, runs: existing?.runs ?? [] }
+    return existing === undefined ? [...this.snapshot.taskProjects, row]
+      : this.snapshot.taskProjects.map(value => value.id === project.id ? row : value)
+  }
+
+  async refreshTasks(signal?: AbortSignal): Promise<void> {
+    const request = ++this.taskRequestVersion
+    const version = this.taskVersion
+    const response = await this.rpc<{ projects: TaskProject[] }>('tasks/list', {}, signal)
+    // Do not replace a newer live update with a catalog read that began before it.
+    if (this.disposed || signal?.aborted || request !== this.taskRequestVersion || version !== this.taskVersion) return
+    const projects = response.projects.map(row => {
+      const cached = this.projectCache.get(row.id)
+      return cached && (cached.dirty || this.hasProjectWork(row.id) || row.id === this.snapshot.project?.id)
+        ? { ...row, name: cached.project.name, nodes: cached.project.graph.nodes.map(node => ({ id: node.id, title: node.data.title })) }
+        : row
+    })
+    const runs = new Map(projects.flatMap(project => project.runs).map(run => [run.id, run]))
+    for (const run of this.snapshot.workflowRuns) {
+      if (this.vdRunControllers.has(run.id)) runs.set(run.id, run)
+    }
+    for (const project of projects) {
+      const cached = this.projectCache.get(project.id)
+      if (cached !== undefined) this.projectCache.set(project.id, { ...cached, project: { ...cached.project, jobs: project.jobs } })
+    }
     const current = this.snapshot.project
-    if (current === null || this.openedProject?.id !== current.id) return
-    if (this.snapshot.saving || this.snapshot.phase === 'loading') {
-      throw new Error('请等待当前工程操作完成后再放弃更改。')
+    const jobs = projects.find(project => project.id === current?.id)?.jobs
+    this.patch({ taskProjects: projects, workflowRuns: [...runs.values()],
+      ...(current && jobs && !sameJson(current.jobs, jobs) ? { project: { ...current, jobs } } : {}) })
+  }
+
+  private runProjectId(runId: string): string {
+    return this.snapshot.workflowRuns.find(run => run.id === runId)?.projectId ?? this.requireProject().id
+  }
+
+  private jobProjectId(jobId: string): string {
+    return this.snapshot.taskProjects.find(project => project.jobs.some(job => job.id === jobId))?.id ?? this.requireProject().id
+  }
+
+  loadGallery = async (signal?: AbortSignal): Promise<GalleryProject[]> => {
+    const { projects } = await this.rpc<{ projects: GalleryProject[] }>('gallery/list', {}, signal)
+    return projects
+  }
+
+  private async projectForAction(projectId: string): Promise<VideoProject> {
+    if (projectId === this.snapshot.project?.id) return structuredClone(this.snapshot.project)
+    const cached = this.projectCache.get(projectId)
+    if (cached && this.hasProjectWork(projectId)) return structuredClone(cached.project)
+    await this.drafts.flush(projectId)
+    const { project } = await this.rpc<{ project: VideoProject }>('projects/get', { projectId })
+    const { draft, ...saved } = project
+    return { ...saved, ...draft }
+  }
+
+  async renameProjectById(projectId: string, name: string): Promise<void> {
+    if (projectId === this.snapshot.project?.id) { this.renameProject(name); return }
+    const cached = this.projectCache.get(projectId)
+    if (cached && this.hasProjectWork(projectId)) {
+      this.updateProject({ ...cached.project, name }, 'system-saveable')
+      await this.drafts.flush(projectId)
+      return
     }
-    if (this.activeRuns.size > 0 || this.vdRunControllers.size > 0
-      || current.jobs.some(job => job.status === 'queued' || job.status === 'running')
-      || this.snapshot.workflowRuns.some(run => run.projectId === current.id && (run.status === 'queued' || run.status === 'running'))) {
-      throw new Error('请等待任务结束或取消任务后再放弃更改。')
+    await this.drafts.flush(projectId)
+    const { project: saved } = await this.rpc<{ project: VideoProject }>('projects/get', { projectId })
+    const project = { ...saved, ...saved.draft }
+    if (project.name === name) return
+    const draft = this.historyState({ ...project, name })
+    const unsaved = saved.hasSavedVersion === false || !sameJson(draft, this.historyState(saved))
+    this.drafts.stage(projectId, unsaved ? draft : null)
+    this.patch({ projects: this.snapshot.projects.map(row => row.id === projectId ? { ...row, name, unsaved } : row) })
+    await this.drafts.flush(projectId)
+  }
+
+  async reorderProjects(projectIds: string[]): Promise<void> {
+    const before = this.snapshot.projects
+    if (projectIds.length !== before.length || new Set(projectIds).size !== before.length
+      || projectIds.some(id => !before.some(project => project.id === id))) return
+    const version = ++this.reorderVersion
+    this.patch({ projects: projectIds.map(id => before.find(project => project.id === id)!) })
+    try { await this.rpc('projects/reorder', { projectIds }) }
+    catch (error) {
+      if (version === this.reorderVersion) this.patch({ projects: before, error: errorMessage(error) })
+      throw error
     }
-    const project = { ...current, ...structuredClone(this.openedProject.state) }
-    // An execution that was active on opening cannot be rewound with the canvas.
-    project.graph.nodes = project.graph.nodes.map(node => {
-      if (node.data.status !== 'queued' && node.data.status !== 'running') return node
-      const job = current.jobs.find(job => job.id === node.data.jobId)
-      return { ...node, data: { ...node.data, status: job === undefined ? 'idle' : job.status === 'completed' ? 'completed' : 'failed', phase: job?.phase,
-        progress: job?.progress, error: job?.error, result: job?.result } }
-    })
-    this.resetHistory()
-    this.editVersion += 1
-    this.projectGeneration += 1
-    this.patch({
-      project,
-      projects: this.snapshot.projects.map(summary => summary.id === project.id
-        ? { ...project, nodeCount: project.graph.nodes.length } : summary),
-      dirty: this.isDirty(project),
-      conflict: false,
-      error: null,
-      canvasResetVersion: this.snapshot.canvasResetVersion + 1,
-    })
+  }
+
+  async discardChanges(projectId = this.snapshot.project?.id): Promise<void> {
+    if (projectId === undefined) return
+    if (this.snapshot.saving || this.snapshot.phase === 'loading') throw new Error('Wait for the current project operation before discarding changes.')
+    const current = this.snapshot.project?.id === projectId
+    if (this.hasProjectWork(projectId)) throw new Error('Wait for tasks to finish or cancel them before discarding changes.')
+    this.patch({ phase: 'loading', error: null })
+    try {
+      await this.drafts.flush(projectId)
+      const result = await this.rpc<{ project: VideoProject | null; projects: ProjectSummary[] }>('projects/discard', { projectId })
+      this.drafts.forget(projectId)
+      this.projectCache.delete(projectId)
+      this.patch({
+        ...(result.project === null ? {
+          taskProjects: this.snapshot.taskProjects.filter(row => row.id !== projectId),
+          workflowRuns: this.snapshot.workflowRuns.filter(run => run.projectId !== projectId),
+        } : { taskProjects: this.withTaskProject(result.project) }),
+        projects: result.projects, phase: 'ready',
+      })
+      if (!current) return
+      this.resetHistory()
+      this.baseProject = null
+      this.savedState = null
+      this.patch({ project: null, dirty: false, canvasResetVersion: this.snapshot.canvasResetVersion + 1 })
+      const nextId = result.project?.id ?? result.projects[0]?.id
+      if (nextId !== undefined) await this.loadProject(nextId, result.project === null)
+    } catch (error) {
+      this.patch({ phase: 'ready', error: errorMessage(error) })
+      throw error
+    }
   }
 
   async deleteProject(projectId: string = this.requireProject().id): Promise<void> {
@@ -1231,11 +1370,16 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
       throw new Error(`Project ${projectId} was not found.`)
     }
 
+    if (this.hasProjectWork(projectId)) throw new Error('Wait for tasks to finish or cancel them before deleting this workflow.')
     const transition = ++this.transitionVersion
     const deletingCurrent = this.snapshot.project?.id === projectId
     this.patch({ phase: 'loading', error: null, conflict: false })
     try {
+      await this.drafts.flush(projectId)
       const result = await this.rpc<{ projects?: ProjectSummary[] }>('projects/delete', { projectId })
+      this.drafts.forget(projectId)
+      this.projectCache.delete(projectId)
+      this.patch({ taskProjects: this.snapshot.taskProjects.filter(project => project.id !== projectId), workflowRuns: this.snapshot.workflowRuns.filter(run => run.projectId !== projectId) })
       if (transition !== this.transitionVersion) return
       const projects = result.projects ?? this.snapshot.projects.filter(project => project.id !== projectId)
       if (!deletingCurrent) {
@@ -1243,14 +1387,9 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
         return
       }
 
-      for (const timer of this.jobTimers.values()) clearTimeout(timer)
-      this.jobTimers.clear()
-      this.stopVdRunSchedulers()
-      this.activeRuns.clear()
       this.projectGeneration += 1
       this.baseProject = null
       this.savedState = null
-      this.openedProject = null
       this.editVersion = 0
       this.resetHistory()
       this.patch({
@@ -1260,7 +1399,6 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
         saving: false,
         conflict: false,
         phase: 'ready',
-        workflowRuns: [],
       })
       const nextProject = projects[0]
       if (nextProject !== undefined) await this.loadProject(nextProject.id, true)
@@ -1438,7 +1576,7 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
     const project = this.requireProject()
     const node = project.graph.nodes.find(candidate => candidate.id === nodeId)
     if (node === undefined) throw new Error(`Node ${nodeId} was not found.`)
-    if (node.data.status === 'queued' || node.data.status === 'running' || this.activeRuns.has(nodeId)) {
+    if (node.data.status === 'queued' || node.data.status === 'running' || this.activeRuns.has(this.runKey(project.id, nodeId))) {
       throw new Error('Cancel the active job before changing this node\'s Freeze state.')
     }
     if (node.data.frozen === frozen) return
@@ -1456,7 +1594,7 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
     const ids = new Set(nodeIds)
     const targets = project.graph.nodes.filter(node => ids.has(node.id))
     if (targets.length === 0) return
-    if (targets.some(node => node.data.status === 'queued' || node.data.status === 'running' || this.activeRuns.has(node.id))) {
+    if (targets.some(node => node.data.status === 'queued' || node.data.status === 'running' || this.activeRuns.has(this.runKey(project.id, node.id)))) {
       throw new Error('Cancel active jobs before changing the selected nodes’ Freeze state.')
     }
     const frozen = !targets.every(node => node.data.frozen === true)
@@ -1548,9 +1686,9 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
     this.updateGraph(nodes, edges, project.graph.viewport)
   }
 
-  private updateSystemNode(nodeId: string, patch: Partial<DirectorNodeData>): void {
-    const project = this.snapshot.project
-    if (project === null) return
+  private updateSystemNode(nodeId: string, patch: Partial<DirectorNodeData>, projectId = this.snapshot.project?.id): void {
+    const project = this.cachedProject(projectId)
+    if (project == null) return
     const nodes = project.graph.nodes.map(node => node.id === nodeId
       ? { ...node, data: { ...node.data, ...patch } }
       : node)
@@ -1561,9 +1699,26 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
     this.updateProject({ ...project, graph }, 'system')
   }
 
+  /** Begin a new run display without discarding cached outputs or interrupting other jobs. */
+  private resetRunStatuses(projectId = this.requireProject().id): void {
+    const project = this.requireRunProject(projectId)
+    const nodes = project.graph.nodes.map(node => {
+      if (node.data.frozen === true || this.activeRuns.has(this.runKey(project.id, node.id)) || node.data.status === 'running') return node
+      return { ...node, data: { ...node.data, status: 'idle' as const,
+        phase: undefined, progress: undefined, error: undefined, jobId: undefined,
+        runStartedAt: undefined, runCompletedAt: undefined } }
+    })
+    this.updateProject({ ...project, graph: { ...project.graph, nodes } }, 'system')
+  }
+
   private updateVisibleJob(job: DirectorJob): void {
-    const project = this.snapshot.project
-    if (project === null || job.projectId !== project.id) return
+    const project = this.cachedProject(job.projectId)
+    this.taskVersion += 1
+    if (project == null) {
+      this.patch({ taskProjects: this.snapshot.taskProjects.map(row => row.id === job.projectId
+        ? { ...row, jobs: [...row.jobs.filter(candidate => candidate.id !== job.id), job] } : row) })
+      return
+    }
     const existing = project.jobs.findIndex(candidate => candidate.id === job.id)
     const jobs = (existing < 0
       ? [...project.jobs, job]
@@ -1581,11 +1736,13 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
   }
 
   private storeVdRun(run: VdRun): void {
+    this.taskVersion += 1
     const workflowRuns = [run, ...this.snapshot.workflowRuns.filter(candidate => candidate.id !== run.id)]
     this.patch({ workflowRuns, error: null })
   }
 
   private patchVdRun(id: string, patch: Partial<VdRun>): void {
+    this.taskVersion += 1
     const workflowRuns = this.snapshot.workflowRuns.map(run => run.id === id ? { ...run, ...patch } : run)
     this.patch({ workflowRuns })
   }
@@ -1697,6 +1854,52 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
     return asset
   }
 
+  /** Replace an input's content as one undoable edit, retaining its identity and connections. */
+  async replaceInputFile(nodeId: string, file: File): Promise<void> {
+    const project = this.requireProject()
+    const projectGeneration = this.projectGeneration
+    const node = project.graph.nodes.find(candidate => candidate.id === nodeId)
+    if (node === undefined || !['load-text', 'load-image', 'load-video'].includes(node.data.kind)) {
+      throw new Error('Choose a text, image, or video input node.')
+    }
+    let patch: Partial<DirectorNodeData>
+    if (node.data.kind === 'load-text') {
+      if (!file.type.startsWith('text/') && !/\.(txt|md|markdown|csv|json|srt|vtt|log)$/iu.test(file.name)) {
+        throw new Error('Choose a UTF-8 text file.')
+      }
+      const text = new TextDecoder('utf-8', { fatal: true }).decode(await file.arrayBuffer())
+      if (text.includes('\0')) throw new Error('Choose a UTF-8 text file.')
+      patch = { text }
+    } else {
+      const kind = node.data.kind === 'load-image' ? 'image' : 'video'
+      if (fileKind(file) !== kind) throw new Error(kind === 'image' ? 'Choose an image file for this input.' : 'Choose a video file for this input.')
+      const { asset } = await this.rpc<{ asset: AssetRef }>('assets/put', {
+        projectId: project.id,
+        kind,
+        name: file.name,
+        mimeType: inferredMimeType(file, kind),
+        dataBase64: base64(new Uint8Array(await file.arrayBuffer())),
+      })
+      patch = {
+        asset, mediaKind: kind, assets: undefined, maskAsset: undefined,
+        trim: kind === 'video' ? { start: 0 } : undefined,
+        result: undefined, status: 'idle', phase: undefined, progress: undefined,
+        jobId: undefined, error: undefined,
+        runStartedAt: undefined, runCompletedAt: undefined,
+      }
+    }
+    const current = this.snapshot.project
+    if (current?.id !== project.id || this.projectGeneration !== projectGeneration || this.snapshot.phase === 'loading') {
+      throw new Error('The project changed before the file could be attached. Choose the file again.')
+    }
+    const target = current.graph.nodes.find(candidate => candidate.id === nodeId)
+    if (target === undefined || target.data.kind !== node.data.kind
+      || target.data.asset?.id !== node.data.asset?.id || target.data.text !== node.data.text) {
+      throw new Error('The input changed before the file could be attached. Choose the file again.')
+    }
+    this.updateNode(nodeId, patch)
+  }
+
   async uploadDerived(file: File, kind: 'sketch' | 'mask'): Promise<AssetRef> {
     const project = this.requireProject()
     const projectGeneration = this.projectGeneration
@@ -1737,10 +1940,10 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
     if (ids.size === 0) return
     const targets = project.graph.nodes.filter(node => ids.has(node.id))
     if (targets.length === 0) return
-    const running = targets.find(node => node.data.status === 'queued' || node.data.status === 'running' || this.activeRuns.has(node.id))
+    const running = targets.find(node => node.data.status === 'queued' || node.data.status === 'running' || this.activeRuns.has(this.runKey(project.id, node.id)))
     if (running !== undefined) throw new Error(`Cancel ${running.data.title} before deleting it.`)
     for (const node of targets) {
-      this.activeRuns.delete(node.id)
+      this.activeRuns.delete(this.runKey(project.id, node.id))
       if (node.data.jobId === undefined) continue
       const timer = this.jobTimers.get(node.data.jobId)
       if (timer !== undefined) clearTimeout(timer)
@@ -1865,17 +2068,18 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
     return this.addCreatedNode(node, incoming)
   }
 
-  async runNode(nodeId: string): Promise<void> {
-    if (this.activeRuns.get(nodeId)?.workflowRunId !== undefined) {
+  async runNode(nodeId: string, projectId = this.requireProject().id): Promise<void> {
+    if (projectId !== this.snapshot.project?.id) await this.selectProject(projectId)
+    if (this.activeTriggers.has(this.runKey(projectId, nodeId)) || this.activeRuns.get(this.runKey(projectId, nodeId))?.workflowRunId !== undefined) {
       throw new Error('This node is executing a submitted workflow. Queue another workflow or cancel its current run first.')
     }
     const node = this.requireProject().graph.nodes.find(candidate => candidate.id === nodeId)
     if (node === undefined) throw new Error(`Node ${nodeId} was not found`)
     if (isTriggerNodeKind(node.data.kind)) {
-      await this.submitTriggerRun(nodeId)
+      await this.submitTriggerRun(nodeId, { projectId })
       return
     }
-    await this.submitNodeRun(nodeId)
+    await this.submitNodeRun(nodeId, { projectId })
   }
 
   async runDependencies(nodeId: string): Promise<string> {
@@ -1883,16 +2087,20 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
   }
 
   private async submitTriggerRun(nodeId: string, options: NodeRunOptions = {}): Promise<void> {
-    if ((this.snapshot.saving && options.workflowRunId === undefined) || this.snapshot.phase === 'loading') {
+    if (options.workflowRunId === undefined && (this.snapshot.saving || this.snapshot.phase === 'loading')) {
       throw new Error('Wait for the current project operation before running a trigger node.')
     }
-    const project = this.requireProject()
+    const project = this.requireRunProject(options.projectId ?? this.requireProject().id)
     const executionGraph = options.graph ?? project.graph
     const node = executionGraph.nodes.find(candidate => candidate.id === nodeId)
     if (node === undefined) throw new Error(`Node ${nodeId} was not found`)
     if (!isTriggerNodeKind(node.data.kind)) throw new Error(`${node.data.title} is not a trigger node.`)
     if (node.data.frozen === true) throw new Error(`${node.data.title} is frozen. Unfreeze it before running the node directly.`)
     if (signalAborted(options.signal)) throw new Error('vd-run was cancelled.')
+    const key = this.runKey(project.id, nodeId)
+    const trigger = new AbortController()
+    const signal = options.signal ?? trigger.signal
+    this.activeTriggers.set(key, trigger)
     try {
       validateTriggerNodeConnections(executionGraph, nodeId)
       const definition = nodeDefinition(node.data, this.snapshot.nodeDefinitions)
@@ -1904,42 +2112,49 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
         && node.data.vramReleaseWaitSeconds! <= 300
         ? node.data.vramReleaseWaitSeconds
         : 10
+      if (options.workflowRunId === undefined) this.resetRunStatuses(project.id)
+      const runStartedAt = new Date().toISOString()
       this.updateSystemNode(nodeId, {
         status: 'running',
+        runStartedAt,
+        runCompletedAt: undefined,
         phase: action === 'ollama-eject'
           ? 'ejecting-models'
           : action === 'comfyui-clear' ? 'unloading-and-clearing-cache' : 'bypassing',
         progress: 0.5,
         error: undefined,
         jobId: undefined,
-      })
-      await this.rpc('triggers/run', { action, releaseWaitSeconds }, options.signal)
-      if (signalAborted(options.signal)) throw new Error('vd-run was cancelled.')
+      }, project.id)
+      await this.rpc('triggers/run', { action, releaseWaitSeconds }, signal)
+      if (signalAborted(signal)) throw new Error('vd-run was cancelled.')
       this.updateSystemNode(nodeId, {
         status: 'completed',
+        runStartedAt,
+        runCompletedAt: new Date().toISOString(),
         phase: 'completed',
         progress: 1,
         error: undefined,
         jobId: undefined,
-      })
+      }, project.id)
     } catch (error) {
       this.updateSystemNode(nodeId, {
-        status: signalAborted(options.signal) ? 'idle' : 'failed',
-        phase: signalAborted(options.signal) ? 'cancelled' : 'trigger-failed',
+        status: signalAborted(signal) ? 'idle' : 'failed',
+        phase: signalAborted(signal) ? 'cancelled' : 'trigger-failed',
         progress: 0,
         error: errorMessage(error),
         jobId: undefined,
-      })
+      }, project.id)
       throw error
+    } finally {
+      if (this.activeTriggers.get(key) === trigger) this.activeTriggers.delete(key)
     }
   }
 
   private async submitNodeRun(nodeId: string, options: NodeRunOptions = {}): Promise<ActiveNodeRun> {
-    if ((this.snapshot.saving && options.workflowRunId === undefined) || this.snapshot.phase === 'loading') {
+    if (options.workflowRunId === undefined && (this.snapshot.saving || this.snapshot.phase === 'loading')) {
       throw new Error('Wait for the current project operation before running a vd-node.')
     }
-    const project = this.requireProject()
-    const projectGeneration = this.projectGeneration
+    const project = this.requireRunProject(options.projectId ?? this.requireProject().id)
     const sourceGraph = options.graph ?? project.graph
     const storedNode = sourceGraph.nodes.find(candidate => candidate.id === nodeId)
     if (storedNode === undefined) throw new Error(`Node ${nodeId} was not found`)
@@ -2081,12 +2296,12 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
         progress: 0,
         error: errorMessage(error),
         jobId: undefined,
-      })
+      }, project.id)
       throw error
     }
+    if (options.workflowRunId === undefined) this.resetRunStatuses(project.id)
     const activeRun: ActiveNodeRun = {
       projectId: project.id,
-      projectGeneration,
       clientRunId,
       seedStateAtSubmission: {
         seed: node.data.seed,
@@ -2095,9 +2310,10 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
       workflowRunId: options.workflowRunId,
       completion: options.awaitCompletion === true ? activeRunCompletion() : undefined,
     }
-    this.activeRuns.get(nodeId)?.completion?.reject(new Error(`${node.data.title} was superseded by a newer run.`))
-    this.activeRuns.set(nodeId, activeRun)
-    this.updateSystemNode(nodeId, { status: 'queued', phase: 'submitting', progress: 0, error: undefined, jobId: undefined })
+    this.activeRuns.get(this.runKey(project.id, nodeId))?.completion?.reject(new Error(`${node.data.title} was superseded by a newer run.`))
+    this.activeRuns.set(this.runKey(project.id, nodeId), activeRun)
+    this.updateSystemNode(nodeId, { status: 'queued', phase: 'submitting', progress: 0, error: undefined, jobId: undefined,
+      runStartedAt: undefined, runCompletedAt: undefined }, project.id)
     try {
       const { job } = await this.rpc<{ job: DirectorJob }>('jobs/start', {
         projectId: project.id,
@@ -2115,31 +2331,31 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
       if (!this.isActiveRun(nodeId, activeRun)) return activeRun
       activeRun.jobId = job.id
       this.updateVisibleJob(job)
-      this.updateSystemNode(nodeId, { jobId: job.id, status: 'queued', phase: job.phase })
+      this.updateSystemNode(nodeId, { jobId: job.id, status: job.status === 'running' ? 'running' : 'queued', phase: job.phase,
+        progress: job.progress, runStartedAt: job.startedAt, runCompletedAt: undefined }, project.id)
       this.scheduleJobPoll(job.id, nodeId, 0, activeRun)
-      if (signalAborted(options.signal)) await this.cancelJob(job.id)
+      if (signalAborted(options.signal)) await this.cancelJob(job.id, project.id)
     } catch (error) {
       // A failed Cancel RPC does not undo a successful jobs/start. Preserve the
       // poller so the submitted job can still be observed and cancelled again.
       if (activeRun.jobId !== undefined && (error as RemoteFailure).code === 'video-director/cancel-request-failed') throw error
       if (this.isActiveRun(nodeId, activeRun)) {
-        this.activeRuns.delete(nodeId)
+        this.activeRuns.delete(this.runKey(project.id, nodeId))
         this.updateSystemNode(nodeId, {
           status: 'failed',
           phase: 'submission-failed',
           progress: 0,
           error: errorMessage(error),
-        })
+        }, project.id)
       }
       throw error
     }
     return activeRun
   }
 
-  async cancelJob(jobId: string): Promise<void> {
-    const project = this.requireProject()
+  async cancelJob(jobId: string, projectId = this.jobProjectId(jobId)): Promise<void> {
     try {
-      const { job } = await this.rpc<{ job: DirectorJob }>('jobs/cancel', { projectId: project.id, jobId })
+      const { job } = await this.rpc<{ job: DirectorJob }>('jobs/cancel', { projectId, jobId })
       this.updateVisibleJob(job)
     } catch (cause) {
       throw Object.assign(new Error(`Could not request cancellation for job ${jobId}: ${errorMessage(cause)}`), {
@@ -2148,9 +2364,13 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
     }
   }
 
-  async deleteJob(jobId: string): Promise<void> {
-    const project = this.requireProject()
-    await this.rpc<{ job: DirectorJob }>('jobs/delete', { projectId: project.id, jobId })
+  async deleteJob(jobId: string, projectId = this.jobProjectId(jobId)): Promise<void> {
+    await this.rpc<{ job: DirectorJob }>('jobs/delete', { projectId, jobId })
+    this.taskVersion += 1
+    this.patch({ taskProjects: this.snapshot.taskProjects.map(row => row.id === projectId
+      ? { ...row, jobs: row.jobs.filter(job => job.id !== jobId) } : row) })
+    const project = this.cachedProject(projectId)
+    if (project === undefined) return
     const jobs = project.jobs.filter(candidate => candidate.id !== jobId)
     const latest = jobs.at(-1)
     const status: VideoProject['status'] = jobs.some(candidate => candidate.status === 'queued' || candidate.status === 'running')
@@ -2164,11 +2384,7 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
         ? { ...node, data: { ...node.data, jobId: undefined } }
         : node),
     }
-    const workflowRuns = this.snapshot.workflowRuns.filter(run => (
-      run.status === 'running' || jobs.some(job => job.workflowRunId === run.id)
-    ))
     this.updateProject({ ...project, graph, jobs, status }, 'system')
-    this.patch({ workflowRuns })
   }
 
   async runVdWorkflow(options: {
@@ -2235,10 +2451,11 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
     this.storeVdRun(summary)
     const submitted = { name: executionSource.name, graph: executionSource.graph, settings: executionSource.settings }
     this.vdRunSnapshots.set(id, structuredClone(submitted))
-    const previous = this.vdRunTail
+    const previous = this.vdRunTails.get(project.id) ?? Promise.resolve()
     let release!: () => void
     const finished = new Promise<void>(resolve => { release = resolve })
-    this.vdRunTail = previous.catch(() => {}).then(() => finished)
+    const tail = previous.catch(() => {}).then(() => finished)
+    this.vdRunTails.set(project.id, tail)
     const updateRun = async (patch: Partial<VdRun>): Promise<void> => {
       Object.assign(summary, patch)
       this.patchVdRun(id, patch)
@@ -2251,17 +2468,18 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
       await this.persistVdRun(summary, submitted)
       await waitForRunTurn(previous, controller.signal)
       // A direct node job may have been started before this workflow was queued.
-      while (plan.nodeIds.some(nodeId => this.activeRuns.has(nodeId))) {
+      while (plan.nodeIds.some(nodeId => this.activeRuns.has(this.runKey(project.id, nodeId)) || this.activeTriggers.has(this.runKey(project.id, nodeId)))) {
         await waitForRunTurn(new Promise<void>(resolve => setTimeout(resolve, 100)), controller.signal)
       }
       controller.signal.throwIfAborted()
       await updateRun({ status: 'running' })
       for (let batchIndex = 0; batchIndex < batchSize; batchIndex += 1) {
         if (controller.signal.aborted) throw new Error('vd-run was cancelled.')
+        this.resetRunStatuses(project.id)
         let executionProject = { ...executionSource, graph: structuredClone(executionSource.graph) }
         for (const stage of plan.stages) {
           if (controller.signal.aborted) throw new Error('vd-run was cancelled.')
-          while (stage.some(nodeId => this.activeRuns.has(nodeId))) {
+          while (stage.some(nodeId => this.activeRuns.has(this.runKey(project.id, nodeId)) || this.activeTriggers.has(this.runKey(project.id, nodeId)))) {
             await waitForRunTurn(new Promise<void>(resolve => setTimeout(resolve, 100)), controller.signal)
           }
           const outcomes = await Promise.allSettled(stage.map(async nodeId => {
@@ -2269,7 +2487,8 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
             if (node === undefined) throw new Error(`Node ${nodeId} disappeared from the run snapshot.`)
             if (isTriggerNodeKind(node.data.kind)) {
               await this.submitTriggerRun(nodeId, {
-                graph: executionProject.graph,
+                projectId: project.id,
+              graph: executionProject.graph,
                 workflowRunId: id,
                 workflowRunMode: options.mode,
                 batchIndex,
@@ -2283,6 +2502,7 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
               ? ((configuredSeed! + batchIndex) % 2_147_483_648)
               : undefined
             const activeRun = await this.submitNodeRun(nodeId, {
+              projectId: project.id,
               graph: executionProject.graph,
               sourceRevision: executionSource.revision,
               workflowRunId: id,
@@ -2312,7 +2532,7 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
               failures.push(job.error ?? `${job.status}: ${job.phase}`)
               continue
             }
-            executionProject = this.projectWithJobResult(executionProject, nodeId, job.result, false)
+            executionProject = this.projectWithJobResult(executionProject, nodeId, job.result, 'execution')
           }
           await updateRun({ completedJobs })
           if (failures.length > 0) throw new Error(failures.join(' '))
@@ -2334,27 +2554,29 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
         completedAt: new Date().toISOString(),
         error: message,
       })
-      if (!cancelled) this.patch({ error: message })
+      if (!cancelled && this.snapshot.project?.id === project.id) this.patch({ error: message })
       throw error
     } finally {
       this.vdRunControllers.delete(id)
       this.vdRunWrites.delete(id)
       this.vdRunSnapshots.delete(id)
       release()
+      if (this.vdRunTails.get(project.id) === tail) this.vdRunTails.delete(project.id)
     }
   }
 
-  async cancelVdRun(workflowRunId: string): Promise<void> {
+  async cancelVdRun(workflowRunId: string, projectId = this.runProjectId(workflowRunId)): Promise<void> {
     this.vdRunControllers.get(workflowRunId)?.abort('Cancelled by the Video Director user')
-    const project = this.requireProject()
+    const project = this.cachedProject(projectId)
+    const jobs = project?.jobs ?? this.snapshot.taskProjects.find(row => row.id === projectId)?.jobs ?? []
     const jobIds = new Set([...this.activeRuns.values()]
       .filter(run => run.workflowRunId === workflowRunId && run.jobId !== undefined)
       .map(run => run.jobId!))
     // Restored jobs may no longer have a node on the current canvas.
-    for (const job of project.jobs) {
+    for (const job of jobs) {
       if (job.workflowRunId === workflowRunId && (job.status === 'running' || job.status === 'queued')) jobIds.add(job.id)
     }
-    const outcomes = await Promise.allSettled([...jobIds].map(jobId => this.cancelJob(jobId)))
+    const outcomes = await Promise.allSettled([...jobIds].map(jobId => this.cancelJob(jobId, projectId)))
     const errors = outcomes.flatMap(outcome => outcome.status === 'rejected' ? [errorMessage(outcome.reason)] : [])
     if (errors.length > 0) throw new Error(`Could not request cancellation for every job: ${errors.join(' ')}`)
     const saved = this.snapshot.workflowRuns.find(run => run.id === workflowRunId)
@@ -2362,7 +2584,7 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
       && (saved.status === 'queued' || saved.status === 'running')) {
       const stopped = await Promise.all([...jobIds].map(async jobId => {
         while (true) {
-          const { job } = await this.rpc<{ job: DirectorJob }>('jobs/get', { projectId: project.id, jobId })
+          const { job } = await this.rpc<{ job: DirectorJob }>('jobs/get', { projectId, jobId })
           this.updateVisibleJob(job)
           if (job.status !== 'running' && job.status !== 'queued') return job
           await new Promise(resolve => setTimeout(resolve, JOB_POLL_MS))
@@ -2633,9 +2855,7 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
     if (this.snapshot.saving) {
       throw new Error('Wait for the current save to finish before importing a project.')
     }
-    if (this.snapshot.dirty) {
-      throw new Error('Save the current project changes before importing or duplicating a project.')
-    }
+    await this.cacheBeforeSwitch()
     const transition = ++this.transitionVersion
     let createdProjectId: string | undefined
     this.patch({ phase: 'loading', error: null, conflict: false })
@@ -2646,7 +2866,7 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
       const sessionId = await this.ctx.sessions.create()
       const binding = this.requireSessionBinding(sessionId)
       await this.renameSession(binding, name)
-      const created = (await this.rpc<{ project: VideoProject }>('projects/create', { name, sessionId })).project
+      const created = (await this.rpc<{ project: VideoProject }>('projects/create', { name, sessionId, unsaved: true })).project
       createdProjectId = created.id
 
       const restoredAssets = new Map<string, AssetRef>()
@@ -2661,18 +2881,12 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
         restoredAssets.set(asset.sourceId, restored)
       }
       const graph = rewriteArchiveAssets(archive.project.graph, restoredAssets) as DirectorGraph
-      const saved = (await this.rpc<{ project: VideoProject }>('projects/save', {
+      const draft = { name, graph, settings: structuredClone(archive.project.settings) }
+      await this.rpc('projects/draft', {
         projectId: created.id,
-        expectedRevision: created.revision,
-        project: {
-          ...created,
-          name,
-          status: 'draft',
-          graph,
-          settings: structuredClone(archive.project.settings),
-          jobs: [],
-        },
-      })).project
+        draft,
+      })
+      const saved = { ...created, ...draft }
       const persisted = initializeProjectVramTriggers(
         initializeDefaultRegisteredImageWorkflows(
           normalizeLegacyProject(saved),
@@ -2688,13 +2902,8 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
         { ...project, nodeCount: project.graph.nodes.length },
         ...this.snapshot.projects.filter(value => value.id !== project.id),
       ]
-      for (const timer of this.jobTimers.values()) clearTimeout(timer)
-      this.jobTimers.clear()
-      this.stopVdRunSchedulers()
-      this.activeRuns.clear()
       this.baseProject = structuredClone(persisted)
       this.savedState = this.historyState(project)
-      this.openedProject = { id: project.id, state: this.historyState(project) }
       this.resetHistory()
       this.editVersion = 0
       this.projectGeneration += 1
@@ -2703,12 +2912,11 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
       this.patch({
         project,
         projects,
-        dirty: false,
+        dirty: true,
         saving: false,
         conflict: false,
         phase: 'ready',
         error: null,
-        workflowRuns: [],
       })
     } catch (error) {
       if (createdProjectId !== undefined) {
@@ -2721,6 +2929,7 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
 
   private async loadProject(projectId: string, openSession: boolean): Promise<void> {
     const transition = ++this.transitionVersion
+    const cachedAtRequest = this.projectCache.get(projectId)
     this.patch({ phase: 'loading', error: null, conflict: false })
     try {
       const response = await this.rpc<{ project: VideoProject }>('projects/get', { projectId })
@@ -2751,36 +2960,41 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
         }
       }
       if (transition !== this.transitionVersion) return
-      const project = normalizeLoadedPromptValidation(this.restoreCompletedJobResults(persistedProject))
+      const recovered = this.drafts.recover(projectId)
+      const draft = recovered === undefined ? persistedProject.draft : recovered.draft
+      const { draft: _draft, ...savedProject } = persistedProject
+      const saved = normalizeLoadedPromptValidation(this.restoreCompletedJobResults(savedProject))
+      const cached = this.projectCache.get(projectId)
+      const useCached = cached !== undefined && (this.hasProjectWork(projectId) || cached !== cachedAtRequest)
+      const project = useCached ? { ...cached.project, revision: persistedProject.revision }
+        : draft == null ? saved : normalizeLoadedPromptValidation(this.restoreCompletedJobResults({ ...savedProject, ...draft }))
       this.baseProject = structuredClone(persistedProject)
-      this.savedState = this.historyState(project)
-      this.openedProject = { id: project.id, state: this.historyState(project) }
+      this.savedState = useCached ? cached.savedState : this.historyState(saved)
       this.resetHistory()
       this.editVersion = 0
       this.projectGeneration += 1
-      for (const timer of this.jobTimers.values()) clearTimeout(timer)
-      this.jobTimers.clear()
-      this.stopVdRunSchedulers()
-      this.activeRuns.clear()
       if (sessionReady && (openSession || this.ctx.sessions.list.getSnapshot().current !== project.sessionId)) {
         this.ctx.sessions.open(project.sessionId)
       }
-      this.patch({ project, phase: 'ready', dirty: false, saving: false, conflict: false, error: sessionError, workflowRuns: [] })
+      this.patch({ project, phase: 'ready', dirty: useCached ? cached.dirty : project.hasSavedVersion === false || draft != null, saving: false, conflict: false, error: sessionError })
+      if (recovered !== undefined) void this.drafts.flush(projectId).catch(error => this.patch({ error: errorMessage(error) }))
       for (const job of project.jobs) {
-        if ((job.status !== 'queued' && job.status !== 'running') || !project.graph.nodes.some(node => node.id === job.nodeId)) continue
+        if ((job.status !== 'queued' && job.status !== 'running') || !project.graph.nodes.some(node => node.id === job.nodeId)
+          || this.activeRuns.has(this.runKey(project.id, job.nodeId))) continue
         const activeRun: ActiveNodeRun = {
           projectId: project.id,
-          projectGeneration: this.projectGeneration,
           clientRunId: job.clientRunId ?? job.id,
           jobId: job.id,
           workflowRunId: job.workflowRunId,
         }
-        this.activeRuns.set(job.nodeId, activeRun)
+        this.activeRuns.set(this.runKey(project.id, job.nodeId), activeRun)
         this.updateSystemNode(job.nodeId, {
           jobId: job.id,
           status: job.status,
           phase: job.phase,
           progress: job.progress,
+          runStartedAt: job.startedAt,
+          runCompletedAt: undefined,
         })
         this.scheduleJobPoll(job.id, job.nodeId, 0, activeRun)
       }
@@ -2791,9 +3005,21 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
   }
 
   private updateProject(project: VideoProject, origin: ProjectUpdateOrigin = 'user'): void {
-    if (this.snapshot.phase === 'loading') return
     const current = this.snapshot.project
-    if (current !== null && sameJson(project, current)) return
+    if (current?.id !== project.id) {
+      const cached = this.projectCache.get(project.id)
+      if (!cached || sameJson(cached.project, project)) return
+      const dirty = cached.dirty || origin === 'system-saveable'
+      this.projectCache.set(project.id, { ...cached, project, dirty,
+        savedState: origin === 'system' && !dirty ? this.historyState(project) : cached.savedState })
+      if (dirty) this.drafts.stage(project.id, this.historyState(project))
+      this.patch({ projects: this.snapshot.projects.map(row => row.id === project.id
+        ? { ...row, name: project.name, status: project.status, nodeCount: project.graph.nodes.length, unsaved: dirty } : row),
+        taskProjects: this.withTaskProject(project) })
+      return
+    }
+    if (this.snapshot.phase === 'loading' && origin !== 'system' && origin !== 'system-saveable') return
+    if (sameJson(project, current)) return
     if (origin === 'user' && current !== null && this.historyTransaction === null) {
       this.pushBounded(this.undoStack, this.historyState(current))
       this.redoStack.length = 0
@@ -2822,7 +3048,12 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
     const editVersion = this.editVersion
     const local = structuredClone(project)
     this.patch({ saving: true })
-    this.savePromise = this.performSave(local, editVersion).finally(() => {
+    this.drafts.pause(local.id)
+    this.savePromise = this.drafts.settled(local.id).catch(() => {}).then(() => this.performSave(local, editVersion)).finally(() => {
+      this.drafts.resume(local.id)
+      const current = this.snapshot.project
+      if (current?.id === local.id && this.snapshot.dirty) this.drafts.stage(local.id, this.historyState(current))
+      else this.drafts.forget(local.id)
       this.savePromise = null
     })
     return this.savePromise
@@ -2898,6 +3129,7 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
       : {
           ...current,
           revision: project.revision,
+          hasSavedVersion: project.hasSavedVersion,
           status: project.status,
           jobs: project.jobs,
           updatedAt: project.updatedAt,
@@ -2916,13 +3148,13 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
   }
 
   private isActiveRun(nodeId: string, activeRun: ActiveNodeRun, jobId?: string): boolean {
-    if (this.disposed || this.snapshot.project?.id !== activeRun.projectId || this.projectGeneration !== activeRun.projectGeneration) return false
-    if (this.activeRuns.get(nodeId) !== activeRun) return false
+    if (this.disposed) return false
+    if (this.activeRuns.get(this.runKey(activeRun.projectId, nodeId)) !== activeRun) return false
     if (jobId !== undefined && activeRun.jobId !== jobId) return false
-    return activeRun.workflowRunId !== undefined || this.snapshot.project.graph.nodes.some(node => node.id === nodeId)
+    return activeRun.workflowRunId !== undefined || this.cachedProject(activeRun.projectId)?.graph.nodes.some(node => node.id === nodeId) === true
   }
 
-  private scheduleJobPoll(jobId: string, nodeId: string, delay = JOB_POLL_MS, activeRun = this.activeRuns.get(nodeId)): void {
+  private scheduleJobPoll(jobId: string, nodeId: string, delay = JOB_POLL_MS, activeRun = this.activeRuns.get(this.runKey(this.requireProject().id, nodeId))): void {
     if (activeRun === undefined || !this.isActiveRun(nodeId, activeRun, jobId)) return
     const prior = this.jobTimers.get(jobId)
     if (prior !== undefined) clearTimeout(prior)
@@ -2934,53 +3166,54 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
   }
 
   private async pollJob(jobId: string, nodeId: string, activeRun: ActiveNodeRun): Promise<void> {
-    const project = this.snapshot.project
-    if (project === null || !this.isActiveRun(nodeId, activeRun, jobId)) return
+    const project = this.cachedProject(activeRun.projectId)
+    if (project == null || !this.isActiveRun(nodeId, activeRun, jobId)) return
     try {
       const { job } = await this.rpc<{ job: DirectorJob }>('jobs/get', { projectId: project.id, jobId })
       if (!this.isActiveRun(nodeId, activeRun, jobId)) return
       activeRun.consecutivePollFailures = 0
       this.updateVisibleJob(job)
       if (job.status === 'queued' || job.status === 'running') {
-        this.updateSystemNode(nodeId, { status: job.status, phase: job.phase, progress: job.progress, error: undefined, jobId })
+        this.updateSystemNode(nodeId, { status: job.status, phase: job.phase, progress: job.progress, error: undefined, jobId,
+          runStartedAt: job.startedAt, runCompletedAt: undefined }, activeRun.projectId)
         this.scheduleJobPoll(jobId, nodeId, JOB_POLL_MS, activeRun)
         return
       }
       if (job.status === 'completed' && job.result !== undefined) {
         this.applyJobResult(nodeId, job.result, activeRun)
       } else {
-        this.updateSystemNode(nodeId, { status: 'failed', phase: job.phase, error: job.error ?? job.status, progress: job.progress })
+        this.updateSystemNode(nodeId, { status: 'failed', phase: job.phase, error: job.error ?? job.status, progress: job.progress }, activeRun.projectId)
       }
-      if (this.activeRuns.get(nodeId) === activeRun) this.activeRuns.delete(nodeId)
+      if (this.activeRuns.get(this.runKey(activeRun.projectId, nodeId)) === activeRun) this.activeRuns.delete(this.runKey(activeRun.projectId, nodeId))
       activeRun.completion?.resolve(job)
     } catch (error) {
       if (!this.isActiveRun(nodeId, activeRun, jobId)) return
       if (!isPermanentJobPollError(error)) {
         const failures = (activeRun.consecutivePollFailures ?? 0) + 1
         activeRun.consecutivePollFailures = failures
-        const currentProject = this.snapshot.project
+        const currentProject = this.cachedProject(activeRun.projectId)
         const currentJob = currentProject?.jobs.find(candidate => candidate.id === jobId)
         if (currentJob !== undefined) this.updateVisibleJob({ ...currentJob, phase: 'reconnecting' })
-        const currentNode = this.snapshot.project?.graph.nodes.find(node => node.id === nodeId)
+        const currentNode = this.cachedProject(activeRun.projectId)?.graph.nodes.find(node => node.id === nodeId)
         this.updateSystemNode(nodeId, {
           status: currentNode?.data.status === 'queued' ? 'queued' : 'running',
           phase: 'reconnecting',
           error: undefined,
           jobId,
-        })
+        }, activeRun.projectId)
         this.scheduleJobPoll(jobId, nodeId, jobPollRetryDelay(failures), activeRun)
         return
       }
-      this.updateSystemNode(nodeId, { status: 'failed', error: errorMessage(error) })
-      this.activeRuns.delete(nodeId)
+      this.updateSystemNode(nodeId, { status: 'failed', error: errorMessage(error) }, activeRun.projectId)
+      this.activeRuns.delete(this.runKey(activeRun.projectId, nodeId))
       activeRun.completion?.reject(error instanceof Error ? error : new Error(String(error)))
     }
   }
 
   private applyJobResult(nodeId: string, result: VdNodeResult, activeRun?: ActiveNodeRun): void {
     if (activeRun !== undefined && !this.isActiveRun(nodeId, activeRun, activeRun.jobId)) return
-    const project = this.requireProject()
-    const updated = this.projectWithJobResult(project, nodeId, result, true, activeRun)
+    const project = this.requireRunProject(activeRun?.projectId ?? this.requireProject().id)
+    const updated = this.projectWithJobResult(project, nodeId, result, 'live', activeRun)
     if (updated === project) return
     // A terminal result is not a user Undo step, but the materialized output and
     // auto-created Preview are explicit-save canvas changes.
@@ -2994,7 +3227,7 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
     }
     return project.jobs.reduce((current, job) => {
       if (latestJobIds.get(job.nodeId) !== job.id || job.status !== 'completed' || job.result === undefined) return current
-      return this.projectWithJobResult(current, job.nodeId, job.result, false)
+      return this.projectWithJobResult(current, job.nodeId, job.result, 'restore')
     }, project)
   }
 
@@ -3002,7 +3235,7 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
     project: VideoProject,
     nodeId: string,
     result: VdNodeResult,
-    createPreview: boolean,
+    mode: 'live' | 'execution' | 'restore',
     activeRun?: ActiveNodeRun,
   ): VideoProject {
     const source = project.graph.nodes.find(node => node.id === nodeId)
@@ -3024,8 +3257,13 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
           : seedControl === 'decrement'
             ? completedSeed === 0 ? Number.MAX_SAFE_INTEGER : completedSeed - 1
             : undefined
+    const completedJob = activeRun?.jobId === undefined
+      ? [...project.jobs].reverse().find(candidate => candidate.nodeId === nodeId && candidate.status === 'completed')
+      : project.jobs.find(candidate => candidate.id === activeRun.jobId)
     const sourcePatch: Partial<DirectorNodeData> = {
       status: 'completed', progress: 1, phase: 'completed', result, ...payload,
+      runStartedAt: completedJob?.startedAt ?? completedJob?.createdAt ?? source.data.runStartedAt,
+      runCompletedAt: completedJob?.completedAt ?? source.data.runCompletedAt,
       ...(completedSeed === undefined ? {} : { outputSeed: completedSeed }),
       ...(controlledSeed === undefined ? {} : { seed: controlledSeed }),
     }
@@ -3033,17 +3271,30 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
       ? { ...node, data: { ...node.data, ...sourcePatch } }
       : node)
     let edges = [...project.graph.edges]
-    if (createPreview) {
-      nodes = nodes.map(node => node.data.kind === 'preview'
-        && (node.data.derivedFrom === source.id || edges.some(edge => edge.source === source.id && edge.target === node.id))
-        ? { ...node, data: resumedPreviewData(node.data) }
-        : node)
+    // Clear Previews suppresses replay of old results. A newly completed job
+    // must reopen the same output paths in both the editor and run snapshot.
+    // Stop at executable/frozen nodes so their retained outputs stay intact.
+    if (mode !== 'restore') {
+      const resumed = new Set<string>()
+      const pending = [source.id]
+      while (pending.length > 0) {
+        const parentId = pending.pop()!
+        for (const node of nodes) {
+          if (resumed.has(node.id) || node.data.frozen === true
+            || (node.data.kind !== 'preview' && node.data.kind !== 'save')) continue
+          if (node.data.derivedFrom !== parentId && !edges.some(edge => edge.source === parentId && edge.target === node.id)) continue
+          resumed.add(node.id)
+          pending.push(node.id)
+        }
+      }
+      nodes = nodes.map(node => resumed.has(node.id)
+        ? { ...node, data: resumedPreviewData(node.data) } : node)
     }
     const existingPreview = nodes.find(node => (
       node.data.kind === 'preview'
       && (node.data.derivedFrom === source.id || edges.some(edge => edge.source === source.id && edge.target === node.id))
     ))
-    if (createPreview && existingPreview === undefined) {
+    if (mode === 'live' && existingPreview === undefined) {
       const previewId = crypto.randomUUID()
       const definition = this.snapshot.nodeDefinitions.find(candidate => candidate.type === 'core.preview')
       const preview: DirectorNode = {
@@ -3121,7 +3372,7 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
   }
 
   private isDirty(project: VideoProject): boolean {
-    return this.savedState !== null && !sameJson(this.historyState(project), this.savedState)
+    return project.hasSavedVersion === false || (this.savedState !== null && !sameJson(this.historyState(project), this.savedState))
   }
 
   private pushBounded(stack: ProjectHistoryState[], state: ProjectHistoryState): void {
@@ -3137,7 +3388,7 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
 
   private applyHistoryState(current: VideoProject, state: ProjectHistoryState): void {
     const runtimeKeys: Array<keyof DirectorNodeData> = [
-      'status', 'phase', 'progress', 'jobId', 'error', 'result', 'derivedFrom', 'outputSeed',
+      'status', 'phase', 'progress', 'jobId', 'error', 'result', 'derivedFrom', 'outputSeed', 'runStartedAt', 'runCompletedAt',
     ]
     const currentNodes = new Map(current.graph.nodes.map(node => [node.id, node]))
     const nodes = state.graph.nodes.map(node => {
@@ -3191,11 +3442,27 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
   }
 
   private patch(patch: Partial<DirectorSnapshot>): void {
+    const previous = this.snapshot
+    if ((patch.project !== undefined && patch.project !== previous.project)
+      || (patch.projects !== undefined && patch.projects !== previous.projects)) this.taskVersion += 1
     this.snapshot = {
       ...this.snapshot,
       ...patch,
       canUndo: this.undoStack.length > 0,
       canRedo: this.redoStack.length > 0,
+    }
+    const project = this.snapshot.project
+    if (project !== null) {
+      this.projectCache.set(project.id, { project, dirty: this.snapshot.dirty, savedState: this.savedState })
+      if (previous.project !== project) this.snapshot.taskProjects = this.withTaskProject(project)
+      this.snapshot.projects = this.snapshot.projects.map(row => row.id === project.id
+        ? { ...row, name: project.name, nodeCount: project.graph.nodes.length, unsaved: this.snapshot.dirty,
+            hasSavedVersion: project.hasSavedVersion !== false } : row)
+      if (previous.project?.id === project.id
+        && (previous.project !== project || previous.dirty !== this.snapshot.dirty)
+        && (this.snapshot.dirty || previous.dirty)) {
+        this.drafts.stage(project.id, this.snapshot.dirty ? this.historyState(project) : null)
+      }
     }
     for (const listener of [...this.listeners]) listener()
   }

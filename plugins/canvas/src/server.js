@@ -180,7 +180,7 @@ export async function createCanvasServer(options = {}) {
       if ((request.headers.origin && request.headers.origin !== origin)
         || request.headers['sec-fetch-site'] === 'cross-site') return sendJson(response, 403, { error: 'Cross-origin requests are not allowed' })
       const url = new URL(request.url, origin)
-      if (request.method === 'GET' && url.pathname === '/health') return sendJson(response, 200, { ok: true, app: 'canvas', version: '0.1.0', dataDir: runtime.store.root, codexRuntime: codexRuntimeAccess() })
+      if (request.method === 'GET' && url.pathname === '/health') return sendJson(response, 200, { ok: true, app: 'canvas', version: '0.2.0', dataDir: runtime.store.root, codexRuntime: codexRuntimeAccess() })
       if (request.method === 'POST' && url.pathname === '/api/rpc') {
         if (!request.headers['content-type']?.startsWith('application/json')) return sendJson(response, 415, { error: 'Use application/json' })
         const body = await readJson(request)
@@ -190,6 +190,13 @@ export async function createCanvasServer(options = {}) {
         return sendJson(response, 200, result)
       }
       if (request.method === 'GET' || request.method === 'HEAD') {
+        const properties = /^\/api\/video-director\/assets\/([0-9a-f-]+)\/properties$/u.exec(url.pathname)
+        if (properties && request.method === 'GET') {
+          const controller = new AbortController()
+          response.on('close', () => { if (!response.writableEnded) controller.abort() })
+          const result = await rpc('/video-director', 'assets/properties', { assetId: properties[1] }, controller.signal)
+          return sendJson(response, result.ok ? 200 : 503, result)
+        }
         const asset = /^\/api\/video-director\/assets\/([0-9a-f-]+)$/u.exec(url.pathname)
         if (asset) {
           const result = await runtime.store.assetResponse(asset[1], new Request(url, { method: request.method, headers: request.headers }))

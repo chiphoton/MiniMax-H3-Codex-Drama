@@ -2,6 +2,8 @@
 
 A local web canvas for planning and running video-production workflows. The engine is migrated from **DeepSeek-Harness-Video-Director** into this self-contained `plugins/canvas/` directory. It runs without DeepSeek Harness.
 
+Canvas **0.2.0** includes the upstream v0.3.0 media gallery, durable project drafts, sortable project picker, improved media inspection and replacement, text import, and node timing display. See the [sync record](docs/upstream-sync.md) for the exact source commit and Codex adaptations.
+
 **TEXT WORKFLOW** and **IMAGE WORKFLOW** default to **Codex Plan**, using the locally installed Codex CLI and its existing sign-in through the official Codex SDK. The model list is discovered from the signed-in CLI, including available variants. New selections use its reported default model and each model’s default reasoning effort. Existing projects retain their explicit provider and model selections. Video and audio use ComfyUI by default.
 
 Native Codex images are imported from the current SDK thread's `generated_images/<thread-id>/` folder under the Codex home, even when no image payload appears in the SDK stream. The original Codex image stays in place; Canvas stores its own copy under the active data folder's `assets/` directory.
@@ -45,14 +47,22 @@ The adviser resolves paths relative to the installed skill. Plugin installation 
 
 ## First workflow
 
-Open the project picker to find the collapsible **examples/** folder, always above your projects. Choose **canvas-demo** to open an editable copy of the bundled sketch → image → text → video workflow. Current edits are saved before opening the example; each copy gets its own project, assets, and chat session. Opening an example does not run its generation nodes.
+Open the project picker to find the collapsible **examples/** folder, always above your projects. Choose **canvas-demo** to open an editable copy of the bundled sketch → image → text → video workflow. Current edits are cached as a draft before opening the example; each copy gets its own project, assets, and chat session. Opening an example does not run its generation nodes or commit unsaved edits.
 
 Example archives live in [`examples/`](examples/). Add more `*.video-director.json` exports there to make them appear the next time the picker opens. The bundled files are never overwritten by project edits.
 
 1. Create a Video Project. Double-click empty canvas to open the node menu.
 2. Add **TEXT WORKFLOW** or **IMAGE WORKFLOW**. Its provider starts as **Codex Plan**. Enter a prompt and optionally connect image references.
 3. Run the node, inspect its output, and connect it to another workflow or Preview / Save Output.
-4. Press **Save** to persist canvas edits. Run captures the graph at submission without saving later edits. Export from the project menu to move a project with its assets.
+4. Press **Save** to commit canvas edits. Run captures the graph at submission without committing later edits. Export from the project menu to move a project with its assets.
+
+Edits are cached automatically so drafts survive project switches and Canvas restarts. Unsaved projects appear in italics with an asterisk; new projects, imports, duplicates, and example copies remain unsaved until **Save**. **Discard changes** restores the last explicit save, keeping jobs and assets. Discarding a never-saved project removes that copy and its owned assets; its Canvas conversation remains. Drag project rows, or use **Alt+Up / Alt+Down**, to reorder them. Each row's **⋯** menu operates on that project without switching the active canvas.
+
+Workflow runs remain cached when you switch canvases, create a project, or open an example. Their dependencies, queued submissions, and batches continue, and outputs return to the owning workflow. You can run another workflow concurrently; submissions within the same workflow retain their queue order. **Tasks** opens with **All workflows**, labels each run by its workflow, and offers a workflow filter. Cancel, retry, open, export, and delete actions target that workflow. Keep the browser tab open while a multi-node run is active; closing or reloading it stops submission of further stages, while already submitted jobs continue on the server.
+
+**Gallery**, beside **Tasks**, shows inputs and retained outputs across **All workflows**, including drafts and results from deleted nodes. Filter by workflow or search filenames, node names, media types, and text. Inspect an item without losing the gallery's filters. Images support zoom, pan, reset, and metadata; video previews show dimensions, duration, frame rate, format, file size, and metadata. Detailed video properties require `ffprobe` from FFmpeg on the Canvas host; browser-readable dimensions and duration remain available without it.
+
+Image and video input menus support **Replace** and **Inspect**; replacement retains connections and supports Undo. Text inputs show a character count and offer UTF-8 **Import** and **Clear**. Running nodes display their stage or progress, then completion time and duration; queue wait is excluded from new job durations.
 
 The separate Codex adviser panel receives the current graph as context. It has its own resumable SDK conversation per Canvas project and provides advice; it does not directly edit the graph. It shares authentication with Codex, not the desktop task's conversation. Use workflow nodes for text/image generation, and the installed Drama skills in Codex for complete productions and finishing.
 
@@ -78,7 +88,7 @@ Provider overrides entered in **Settings → Connections** are saved in `provide
 
 **Settings → Language** switches the interface between English and Chinese immediately. The preference is remembered in the current browser; the browser language is used initially. Project names, prompts, and generated content stay as written.
 
-**Settings → Storage** puts **Open in Finder / File Explorer**, **Change folder**, and **Reset** beside the current data folder. **Change folder** opens the native folder chooser; select a new or empty folder. Canvas saves current edits, copies the projects, media, run snapshots, chats, and connections, and switches to the copy immediately. **Reset** copies the latest data back to the original default folder (the initial `CANVAS_DATA_DIR`, or the platform default). Existing contents of that default folder are retained in a sibling `.backup-…` folder. Previous data folders remain as backups. Active generations, chats, and canvas workflows must finish or be cancelled first. Linux folder selection requires Zenity or KDialog in a desktop session.
+**Settings → Storage** puts **Open in Finder / File Explorer**, **Change folder**, and **Reset** beside the current data folder. **Change folder** opens the native folder chooser; select a new or empty folder. Canvas flushes cached drafts, copies the projects, project order, media, run snapshots, chats, and connections, and switches to the copy immediately. It preserves the distinction between saved workflows and drafts. **Reset** copies the latest data back to the original default folder (the initial `CANVAS_DATA_DIR`, or the platform default). Existing contents of that default folder are retained in a sibling `.backup-…` folder. Previous data folders remain as backups. Active generations, chats, and canvas workflows must finish or be cancelled first. Linux folder selection requires Zenity or KDialog in a desktop session.
 
 The original launch directory keeps a small `.canvas-storage.json` locator, so subsequent starts with the same `CANVAS_DATA_DIR` follow the new location. Keep that locator or launch directly with `CANVAS_DATA_DIR` pointing to the new folder. A missing destination drive produces an explicit startup error. To restore a backup, stop Canvas and remove its `.canvas-storage.json` locator if present before launching against the backup folder. `/health` and the Storage tab report the active `dataDir`.
 
@@ -98,4 +108,4 @@ The CLI helper accepts `--file payload.json` for an RPC payload. See [usage and 
 
 `src/client/` contains React/XYFlow canvas code. `src/server.js`, `src/local-settings.js`, and `src/chat-sessions.js` replace Harness hosting, configuration, and sessions. The provider/runtime/store modules retain the original vd-workflow semantics and API names. The legacy `deepseek-harness-video-director-project` archive marker is intentionally preserved for import/export compatibility; exported graphs import without bringing across a Harness conversation or credentials.
 
-The original checkout is unchanged. No user projects, generated media, caches, credentials, or `node_modules` were migrated. [`upstream-lock.json`](upstream-lock.json) records the source commit and original file hashes. [`LICENSE`](LICENSE) retains the upstream MIT notice. See [`NOTICE.md`](NOTICE.md) for provenance.
+The original checkout is unchanged. No user projects, generated media, caches, credentials, or `node_modules` were migrated. [`upstream-lock.json`](upstream-lock.json) records the synchronized source commit and upstream file hashes; Codex adaptations can differ from those hashes. [`LICENSE`](LICENSE) retains the upstream MIT notice. See [`NOTICE.md`](NOTICE.md) for provenance.

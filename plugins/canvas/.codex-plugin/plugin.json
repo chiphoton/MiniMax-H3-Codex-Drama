@@ -1,7 +1,7 @@
 {
   "name": "canvas",
-  "version": "0.1.0",
-  "description": "A local web workflow canvas with Codex Plan text/image defaults and an environment and usage adviser.",
+  "version": "0.2.0",
+  "description": "A local web workflow canvas with a media gallery, recoverable project drafts, Codex Plan text/image defaults, and an environment and usage adviser.",
   "author": {
     "name": "chiphoton",
     "url": "https://github.com/chiphoton"

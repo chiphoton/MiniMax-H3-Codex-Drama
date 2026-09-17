@@ -49,7 +49,7 @@ export async function fetchCodexModels({ signal, executable = codexExecutable(),
     send({ id, method, params })
   })
   try {
-    await request('initialize', { clientInfo: { name: 'codex_drama_canvas', title: 'Codex Drama Canvas', version: '0.1.0' } })
+    await request('initialize', { clientInfo: { name: 'codex_drama_canvas', title: 'Codex Drama Canvas', version: '0.2.0' } })
     send({ method: 'initialized', params: {} })
     const models = []
     const cursors = new Set()

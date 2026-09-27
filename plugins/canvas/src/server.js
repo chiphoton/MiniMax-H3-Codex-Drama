@@ -58,6 +58,7 @@ async function createRuntime(dataDir, options) {
   const sessions = new ChatSessions(store.root, { createCodex: options.createCodex, codexModels, getProvider: () => providerSettings.resolved().providers.find(provider => provider.kind === 'codex-plan') })
   await sessions.init()
   const directorRpc = createDirectorRpc({ store, workflows, nodes, providers, jobs, providerSettings, registerAsset: async () => {} })
+  await jobs.workflowScheduler.recover()
   const examples = new ExampleProjects(options.examplesDir)
 
   const rpc = async (channel, endpoint, payload = {}, signal) => {
@@ -129,11 +130,13 @@ export async function createCanvasServer(options = {}) {
         next = await createRuntime(destination, options)
         await saveStorageLocation(location.settingsPath, destination)
       } catch (error) {
+        await next?.jobs.workflowScheduler.close()
         await next?.sessions.close()
         await next?.codexModels.close()
         throw storageError(`Data was copied to ${destination}, but Canvas could not activate it. The original folder is still in use. ${error.message}`)
       }
       await runtime.codexModels.close()
+      await runtime.jobs.workflowScheduler.close()
       runtime = next
       return { ...await storageInfo(), canChange: true, blockedReason: null, previousDataDir, backupDataDir }
     })()
@@ -180,7 +183,7 @@ export async function createCanvasServer(options = {}) {
       if ((request.headers.origin && request.headers.origin !== origin)
         || request.headers['sec-fetch-site'] === 'cross-site') return sendJson(response, 403, { error: 'Cross-origin requests are not allowed' })
       const url = new URL(request.url, origin)
-      if (request.method === 'GET' && url.pathname === '/health') return sendJson(response, 200, { ok: true, app: 'canvas', version: '0.2.0', dataDir: runtime.store.root, codexRuntime: codexRuntimeAccess() })
+      if (request.method === 'GET' && url.pathname === '/health') return sendJson(response, 200, { ok: true, app: 'canvas', version: '0.4.0', dataDir: runtime.store.root, codexRuntime: codexRuntimeAccess() })
       if (request.method === 'POST' && url.pathname === '/api/rpc') {
         if (!request.headers['content-type']?.startsWith('application/json')) return sendJson(response, 415, { error: 'Use application/json' })
         const body = await readJson(request)
@@ -208,7 +211,7 @@ export async function createCanvasServer(options = {}) {
         const file = STATIC_FILES.get(url.pathname)
         if (file) {
           const bytes = await readFile(join(options.distDir ?? DEFAULT_DIST, file[0]))
-          response.writeHead(200, { 'Content-Type': file[1], 'Content-Length': bytes.length, 'Cache-Control': 'no-cache', 'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; frame-ancestors 'none'" })
+          response.writeHead(200, { 'Content-Type': file[1], 'Content-Length': bytes.length, 'Cache-Control': 'no-cache', 'Content-Security-Policy': "default-src 'self'; script-src 'self'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self'; frame-ancestors 'none'" })
           response.end(request.method === 'HEAD' ? undefined : bytes)
           return
         }
@@ -236,6 +239,7 @@ export async function createCanvasServer(options = {}) {
         await movePromise?.catch(() => {})
         await Promise.allSettled([...inFlight])
         const { store, sessions, jobs, codexModels } = runtime
+        await jobs.workflowScheduler.close()
         await sessions.close()
         await codexModels.close()
         for (const summary of await store.listProjects()) {

@@ -7,13 +7,14 @@ import { fileURLToPath } from 'node:url'
 import test from 'node:test'
 import { build } from 'esbuild'
 import { ProjectStore } from '../src/project-store.js'
+import { JobManager } from '../src/jobs.js'
 import { ComfyWorkflowStore } from '../src/workflow-store.js'
 import { VdNodeRegistry } from '../src/node-registry.js'
 import { createDirectorRpc } from '../src/rpc.js'
 
 const compiled = await build({ entryPoints: [fileURLToPath(new URL('../src/client/controller.ts', import.meta.url))],
   bundle: true, format: 'esm', platform: 'browser', write: false })
-const { DirectorController } = await import(`data:text/javascript;base64,${Buffer.from(compiled.outputFiles[0].contents).toString('base64')}`)
+const { DirectorController } = await import(`data:text/javascript;base64,${Buffer.from(compiled.outputFiles[0].text + '\n//# sourceURL=preview-controller.js').toString('base64')}`)
 const node = (id, data) => ({ id, type: 'director', position: { x: 0, y: 0 }, data: { title: id, status: 'idle', ...data } })
 const edge = (id, source, target, sourcePortId = 'output', targetPortId = 'reference') => ({
   id, source, target, sourceHandle: 'out', targetHandle: targetPortId.startsWith('field:') ? `in:${targetPortId}` : 'in',
@@ -36,26 +37,23 @@ async function fixture(t, graphFor) {
   const image = await putAsset('image', 'generated-image.png')
   const video = await putAsset('video', 'generated-video.mp4')
   project = await store.saveProject(project.id, { ...project, graph: { ...project.graph, ...graphFor(input) } }, project.revision)
-  const requests = [], jobs = new Map()
-  const rpc = createDirectorRpc({ store, workflows, nodes, providers: { publicCatalog: () => [] }, jobs: {
-    start: async request => {
+  const requests = []
+  const providers = {
+    publicCatalog: () => [],
+    run: async request => {
       requests.push(request)
-      const job = { id: randomUUID(), projectId: project.id, nodeId: request.nodeId, operation: request.operation, providerId: 'fixture',
-        workflowRunId: request.workflowRunId, status: 'completed', phase: 'completed', progress: 1,
-        createdAt: project.createdAt, updatedAt: project.updatedAt,
-        result: request.operation === 'prompt-enhancer' ? { kind: 'text', text: 'Fresh enhanced prompt' }
-          : { kind: 'assets', assets: [request.operation === 'image-generation' ? image : video] } }
-      jobs.set(job.id, job)
-      return job
+      return request.operation === 'prompt-enhancer' ? { kind: 'text', text: 'Fresh enhanced prompt', providerId: 'fixture' }
+        : { kind: 'assets', assets: [request.operation === 'image-generation' ? image : video], providerId: 'fixture' }
     },
-    get: async (_projectId, jobId) => jobs.get(jobId),
-  } })
+  }
+  const jobs = new JobManager(store, providers)
+  const rpc = createDirectorRpc({ store, workflows, nodes, providers, jobs })
   const context = { connection: { rpc: { call: async (_channel, endpoint, payload, signal) => rpc(endpoint, payload, signal) } }, sessions: {
     list: { getSnapshot: () => ({ current: project.sessionId, byId: { [project.sessionId]: { id: project.sessionId } } }), subscribe: () => () => {} },
     binding: () => ({ session: { getSnapshot: () => ({}), rename: async () => ({ ok: true, value: {} }) } }), open: () => {},
   } }
   const controller = new DirectorController(context)
-  t.after(async () => { await controller.flushDrafts(); controller.dispose(); await rm(root, { recursive: true, force: true }) })
+  t.after(async () => { controller.dispose(); await jobs.workflowScheduler.close(); await controller.flushDrafts(); await rm(root, { recursive: true, force: true }) })
   await controller.start()
   return { controller, requests, image, input }
 }

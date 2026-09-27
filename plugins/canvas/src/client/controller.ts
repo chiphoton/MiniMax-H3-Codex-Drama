@@ -1,6 +1,13 @@
+import { prepareNodeRequest, withDefaultRegisteredImageWorkflow } from './node-request'
+import { vdNodeResultPayload, storedVdNodeResult, nodeOutputPayload, hasReusableNodeOutput, combinedSinkPayload, clearedSinkData, suppressedPreviewData, resumedPreviewData, recomputeSinkPayloads, resumeSinkPaths } from './node-results'
+import { fileKind, inferredMimeType, inputFileKind, isTextFile } from './input-files'
+import type { EditMedia, MediaEditResult } from './media-editing'
 import type { Edge, Node, Viewport } from '@xyflow/react'
 import type {
   AssetRef,
+  BatchCase,
+  BatchItem,
+  BatchInputConfig,
   ClientContext,
   DirectorGraph,
   DirectorEdge,
@@ -14,13 +21,14 @@ import type {
   VdNodeDefinitionDescriptor,
   ObservableSource,
   ProjectSummary,
+  ProjectFolderLayout,
+  ProjectFolderChange,
   ProviderDescriptor,
   RemoteFailure,
   RemoteResult,
   SessionBinding,
   SketchDocument,
   VideoProject,
-  TaskProject,
   ComfyWorkflowDescriptor,
   ComfyWorkflowKind,
   VdRunMode,
@@ -49,6 +57,7 @@ import { codexModelForNode, effectiveOllamaModel, ollamaModelSupports } from './
 import { DEFAULT_TEXT_WORKFLOW_SYSTEM_PROMPT } from './default-system-prompt'
 import { planVdRun, validateTriggerNodeConnections } from './workflow-runner'
 import { ProjectDraftCache } from './project-drafts'
+import { batchSourceItems, matchBatchItems, batchRange, caseSeed, materializeBatchCase, collectBatchArtifacts, MAX_BATCH_CASES } from './batch'
 
 const CHANNEL = '/video-director'
 const JOB_POLL_MS = 1_400
@@ -71,10 +80,12 @@ interface ProjectHistoryState {
   name: string
   graph: DirectorGraph
   settings: Record<string, unknown>
+  mediaLibrary?: AssetRef[]
 }
 
 interface ActiveNodeRun {
   projectId: string
+  projectGeneration: number
   clientRunId: string
   seedStateAtSubmission?: {
     seed: number | undefined
@@ -83,6 +94,7 @@ interface ActiveNodeRun {
   jobId?: string
   workflowRunId?: string
   completion?: ActiveRunCompletion
+  suppressSeedUpdate?: boolean
   consecutivePollFailures?: number
 }
 
@@ -110,7 +122,7 @@ interface ActiveRunCompletion {
 }
 
 interface NodeRunOptions {
-  projectId?: string
+  project?: VideoProject
   graph?: DirectorGraph
   sourceRevision?: number
   workflowRunId?: string
@@ -118,12 +130,18 @@ interface NodeRunOptions {
   batchIndex?: number
   batchSize?: number
   seed?: number
+  batchRunId?: string
+  caseId?: string
+  caseIndex?: number
+  suppressSeedUpdate?: boolean
+  onSubmitted?: (job: DirectorJob) => Promise<void>
   awaitCompletion?: boolean
   signal?: AbortSignal
 }
 
 interface ProjectArchiveAsset {
   sourceId: string
+  origin?: AssetRef['origin']
   kind: AssetRef['kind']
   name: string
   mimeType: string
@@ -138,6 +156,7 @@ interface ProjectArchive {
     name: string
     graph: DirectorGraph
     settings: Record<string, unknown>
+    mediaLibrary?: AssetRef[]
   }
   assets: ProjectArchiveAsset[]
 }
@@ -170,7 +189,8 @@ function emptySnapshot(): DirectorSnapshot {
     error: null,
     providerChecks: {},
     workflowRuns: [],
-    taskProjects: [],
+    jobs: [],
+    batchCases: {},
   }
 }
 
@@ -249,32 +269,6 @@ function withDiscoveredModels(
   }
 }
 
-function fileKind(file: File): Exclude<MediaKind, 'text' | 'mask' | 'flow'> {
-  if (file.type.startsWith('image/')) return 'image'
-  if (file.type.startsWith('audio/')) return 'audio'
-  if (file.type.startsWith('video/')) return 'video'
-  const extension = file.name.split('.').at(-1)?.toLowerCase()
-  if (['png', 'jpg', 'jpeg', 'webp', 'gif'].includes(extension ?? '')) return 'image'
-  if (['mp3', 'wav', 'ogg', 'flac', 'm4a'].includes(extension ?? '')) return 'audio'
-  if (['mp4', 'webm', 'mov', 'm4v'].includes(extension ?? '')) return 'video'
-  throw new Error(`Unsupported media type: ${file.type || file.name}`)
-}
-
-function inferredMimeType(file: File, kind: Exclude<MediaKind, 'text' | 'mask' | 'flow'>): string {
-  if (file.type !== '') return file.type
-  const extension = file.name.split('.').at(-1)?.toLowerCase()
-  const byExtension: Record<string, string> = {
-    png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif',
-    mp3: 'audio/mpeg', wav: 'audio/wav', ogg: 'audio/ogg', flac: 'audio/flac', m4a: 'audio/mp4',
-    mp4: 'video/mp4', m4v: 'video/mp4', webm: kind === 'audio' ? 'audio/webm' : 'video/webm', mov: 'video/quicktime',
-  }
-  if (kind === 'sketch') return 'image/png'
-  const inferred = extension === undefined ? undefined : byExtension[extension]
-  if (inferred === undefined || !inferred.startsWith(`${kind}/`)) {
-    throw new Error(`Cannot infer a supported ${kind} MIME type from ${file.name}`)
-  }
-  return inferred
-}
 
 function base64(bytes: Uint8Array): string {
   let binary = ''
@@ -345,6 +339,9 @@ function clearedRuntimeData(data: DirectorNodeData, suppressPreview = false): Di
     error: _error,
     jobId: _jobId,
     outputSeed: _outputSeed,
+    batchRunId: _batchRunId,
+    batchCaseIndex: _batchCaseIndex,
+    batchFrozenCase: _batchFrozenCase,
     previewCleared: _previewCleared,
     status: _status,
     runStartedAt: _runStartedAt,
@@ -376,12 +373,13 @@ async function archiveForProject(
   options: { portable?: boolean } = {},
 ): Promise<ProjectArchive> {
   const graph = options.portable === true ? portableArchivedGraph(project.graph) : archivedGraph(project.graph)
-  const refs = [...collectAssetRefs(graph).values()]
+  const refs = [...collectAssetRefs([graph, project.mediaLibrary]).values()]
   const assets = await Promise.all(refs.map(async (asset): Promise<ProjectArchiveAsset> => {
     const response = await fetch(asset.url, { credentials: 'same-origin' })
     if (!response.ok) throw new Error(`Could not export asset “${asset.name}” (${String(response.status)}).`)
     return {
       sourceId: asset.id,
+      origin: asset.origin,
       kind: asset.kind,
       name: asset.name,
       mimeType: asset.mimeType,
@@ -396,6 +394,7 @@ async function archiveForProject(
       name: project.name,
       graph,
       settings: structuredClone(project.settings),
+      ...(project.mediaLibrary === undefined ? {} : { mediaLibrary: structuredClone(project.mediaLibrary) }),
     },
     assets,
   }
@@ -438,6 +437,7 @@ function parseProjectArchive(text: string): ProjectArchive {
       || !kinds.has(value.kind as AssetRef['kind'])
       || typeof value.name !== 'string' || value.name === '' || value.name.length > 240
       || typeof value.mimeType !== 'string' || value.mimeType === ''
+      || (value.origin !== undefined && value.origin !== 'input' && value.origin !== 'output')
       || typeof value.dataBase64 !== 'string' || value.dataBase64 === ''
       || value.dataBase64.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/u.test(value.dataBase64)) {
       throw new Error(`The project export has invalid asset data at position ${String(index + 1)}.`)
@@ -446,6 +446,7 @@ function parseProjectArchive(text: string): ProjectArchive {
     sourceIds.add(value.sourceId)
     return {
       sourceId: value.sourceId,
+      origin: value.origin as AssetRef['origin'],
       kind: value.kind as AssetRef['kind'],
       name: value.name,
       mimeType: value.mimeType,
@@ -461,7 +462,8 @@ function parseProjectArchive(text: string): ProjectArchive {
       ? { ...node, data: clearedRuntimeData(node.data, node.data.kind === 'preview') }
       : node
   })
-  for (const asset of collectAssetRefs(clonedGraph).values()) {
+  if (project.mediaLibrary !== undefined && !Array.isArray(project.mediaLibrary)) throw new Error('The media library must be an array.')
+  for (const asset of collectAssetRefs([clonedGraph, project.mediaLibrary]).values()) {
     if (!sourceIds.has(asset.id)) throw new Error(`The project export is missing data for asset “${asset.name}”.`)
   }
   return {
@@ -472,6 +474,7 @@ function parseProjectArchive(text: string): ProjectArchive {
       name: project.name.trim(),
       graph: clonedGraph,
       settings: structuredClone(project.settings),
+      ...(project.mediaLibrary === undefined ? {} : { mediaLibrary: structuredClone(project.mediaLibrary) as AssetRef[] }),
     },
     assets,
   }
@@ -514,27 +517,6 @@ function nodeTitle(kind: Exclude<MediaKind, 'mask' | 'flow'>): string {
   })[kind]
 }
 
-function withDefaultRegisteredImageWorkflow(
-  data: DirectorNodeData,
-  providers: readonly ProviderDescriptor[],
-  workflows: readonly ComfyWorkflowDescriptor[],
-): DirectorNodeData {
-  if ((data.kind !== 'image-generation' && data.kind !== 'image-edit')
-    || data.workflowId !== undefined
-    || data.workflow !== undefined) return data
-  const provider = providers.find(candidate => candidate.id === data.providerId)
-  if (provider?.kind !== 'comfyui' && provider?.kind !== 'comfyui-mcp') return data
-  const workflow = workflows.find(candidate => candidate.kind === 'image-generation' || candidate.kind === 'image-edit')
-  if (workflow === undefined) return data
-  return {
-    ...workflow.defaults,
-    ...data,
-    kind: workflow.kind,
-    workflowId: workflow.id,
-    modelFamily: workflow.modelFamily ?? workflow.defaults.modelFamily,
-    workflowValues: Object.fromEntries(workflow.parameters.map(parameter => [parameter.id, parameter.default])),
-  }
-}
 
 function initializeDefaultRegisteredImageWorkflows(
   project: VideoProject,
@@ -675,60 +657,9 @@ function normalizeLoadedPromptValidation(project: VideoProject): VideoProject {
   return changed ? { ...project, graph: { ...project.graph, nodes } } : project
 }
 
-function vdNodeResultPayload(result: VdNodeResult): Partial<DirectorNodeData> {
-  if (result.kind === 'assets') {
-    return {
-      assets: result.assets,
-      asset: result.assets[0],
-      mediaKind: result.assets[0]?.kind,
-      text: undefined,
-    }
-  }
-  return {
-    assets: undefined,
-    asset: undefined,
-    mediaKind: 'text',
-    text: result.kind === 'text' ? result.text : JSON.stringify(result.result, null, 2),
-  }
-}
 
-function storedVdNodeResult(value: unknown): VdNodeResult | undefined {
-  if (value === null || typeof value !== 'object') return undefined
-  const candidate = value as Partial<VdNodeResult>
-  if (candidate.kind === 'assets' && Array.isArray(candidate.assets)) return candidate as VdNodeResult
-  if (candidate.kind === 'text' && typeof candidate.text === 'string') return candidate as VdNodeResult
-  if (candidate.kind === 'mcp-result' && 'result' in candidate) return candidate as VdNodeResult
-  return undefined
-}
 
-function nodeOutputPayload(data: DirectorNodeData): Partial<DirectorNodeData> | undefined {
-  const result = storedVdNodeResult(data.result)
-  if (result !== undefined) return { ...vdNodeResultPayload(result), result }
-  if (data.asset === undefined && data.assets === undefined && data.text === undefined) return undefined
-  return {
-    asset: data.asset,
-    assets: data.assets ?? (data.asset === undefined ? undefined : [data.asset]),
-    text: data.text,
-    mediaKind: data.mediaKind,
-    result: data.result,
-  }
-}
 
-function hasReusableNodeOutput(node: DirectorNode): boolean {
-  if (node.data.kind === 'load-text') {
-    return typeof node.data.text === 'string' && node.data.text.trim() !== ''
-  }
-  if (node.data.kind === 'load-image'
-    || node.data.kind === 'load-video'
-    || node.data.kind === 'load-audio') {
-    return node.data.asset !== undefined || (node.data.assets?.length ?? 0) > 0
-  }
-  const payload = nodeOutputPayload(node.data)
-  return payload?.result !== undefined
-    || payload?.asset !== undefined
-    || (payload?.assets?.length ?? 0) > 0
-    || (typeof payload?.text === 'string' && payload.text.trim() !== '')
-}
 
 function edgeFieldInputId(edge: DirectorEdge): string | undefined {
   const stored = fieldIdFromInputPort(edge.data?.targetPortId)
@@ -738,104 +669,9 @@ function edgeFieldInputId(edge: DirectorEdge): string | undefined {
     : undefined
 }
 
-function combinedSinkPayload(
-  nodes: readonly DirectorNode[],
-  edges: readonly DirectorEdge[],
-  sinkId: string,
-  definitions: readonly VdNodeDefinitionDescriptor[],
-): Partial<DirectorNodeData> | undefined {
-  const graph: DirectorGraph = { nodes: [...nodes], edges: [...edges], viewport: { x: 0, y: 0, zoom: 1 } }
-  const payloads: Array<{ node: DirectorNode; payload: Partial<DirectorNodeData> }> = []
-  for (const edge of edges.filter(candidate => candidate.target === sinkId)) {
-    const node = nodes.find(candidate => candidate.id === edge.source)
-    if (node === undefined) continue
-    const payload = nodeOutputPayload(node.data)
-    if (payload === undefined) continue
-    const ports = resolveEdgePorts(graph, definitions, edge)
-    const carriedTypes = ports.sourceTypes.filter(type => ports.targetTypes.includes(type))
-    const assets = (payload.assets ?? (payload.asset === undefined ? [] : [payload.asset]))
-      .filter(asset => carriedTypes.includes(asset.kind))
-    const text = carriedTypes.includes('text') ? payload.text : undefined
-    if (assets.length === 0 && (text === undefined || text === '')) continue
-    const stored = storedVdNodeResult(payload.result)
-    const result = stored?.kind === 'assets'
-      ? { ...stored, assets }
-      : payload.result
-    payloads.push({
-      node,
-      payload: {
-        asset: assets[0],
-        assets: assets.length === 0 ? undefined : assets,
-        text,
-        mediaKind: assets[0]?.kind ?? (text === undefined ? undefined : 'text'),
-        result,
-      },
-    })
-  }
-  if (payloads.length === 0) return undefined
 
-  const seenAssets = new Set<string>()
-  const assets = payloads.flatMap(({ payload }) => payload.assets ?? (payload.asset === undefined ? [] : [payload.asset]))
-    .filter(asset => {
-      if (seenAssets.has(asset.id)) return false
-      seenAssets.add(asset.id)
-      return true
-    })
-  const texts = payloads
-    .map(({ payload }) => payload.text)
-    .filter((value): value is string => value !== undefined && value !== '')
-  const results = payloads
-    .map(({ payload }) => payload.result)
-    .filter(value => value !== undefined)
-  const completed = payloads.every(({ node }) => node.data.frozen === true
-    || node.data.kind.startsWith('load-')
-    || node.data.status === undefined || node.data.status === 'completed')
-  const starts = payloads.map(({ node }) => node.data.runStartedAt).filter((value): value is string => value !== undefined).sort()
-  const finishes = payloads.map(({ node }) => node.data.runCompletedAt).filter((value): value is string => value !== undefined).sort()
-  return {
-    asset: assets[0],
-    assets: assets.length === 0 ? undefined : assets,
-    text: texts.length === 0 ? undefined : texts.join('\n\n'),
-    mediaKind: assets[0]?.kind ?? (texts.length > 0 ? 'text' : undefined),
-    result: results.length === 0 ? undefined : results.length === 1 ? results[0] : results,
-    status: completed ? 'completed' : 'idle',
-    phase: completed ? 'completed' : undefined,
-    progress: completed ? 1 : undefined,
-    runStartedAt: completed ? starts[0] : undefined,
-    runCompletedAt: completed ? finishes.at(-1) : undefined,
-    derivedFrom: payloads.length === 1 ? payloads[0].node.id : undefined,
-  }
-}
 
-function clearedSinkData(data: DirectorNodeData): DirectorNodeData {
-  const {
-    asset: _asset,
-    assets: _assets,
-    text: _text,
-    mediaKind: _mediaKind,
-    result: _result,
-    derivedFrom: _derivedFrom,
-    phase: _phase,
-    progress: _progress,
-    error: _error,
-    jobId: _jobId,
-    outputSeed: _outputSeed,
-    previewCleared: _previewCleared,
-    runStartedAt: _runStartedAt,
-    runCompletedAt: _runCompletedAt,
-    ...rest
-  } = data
-  return { ...rest, status: 'idle' }
-}
 
-function suppressedPreviewData(data: DirectorNodeData): DirectorNodeData {
-  return { ...clearedSinkData(data), previewCleared: true }
-}
-
-function resumedPreviewData(data: DirectorNodeData): DirectorNodeData {
-  const { previewCleared: _previewCleared, ...rest } = data
-  return rest as DirectorNodeData
-}
 
 const EXECUTABLE_NODE_KINDS = new Set<DirectorNodeData['kind']>([
   'prompt-enhancer',
@@ -843,6 +679,7 @@ const EXECUTABLE_NODE_KINDS = new Set<DirectorNodeData['kind']>([
   'image-edit',
   'video-generation',
   'audio-generation',
+  'video-trim', 'video-crop', 'video-extract-frame',
   'vram-trigger',
   'ollama-eject',
   'comfyui-clear',
@@ -850,6 +687,7 @@ const EXECUTABLE_NODE_KINDS = new Set<DirectorNodeData['kind']>([
 
 function duplicatedNodeData(data: DirectorNodeData, patch: Partial<DirectorNodeData>): DirectorNodeData {
   const merged = { ...data, ...patch }
+  if (merged.kind === 'batch-input' || merged.kind === 'batch-output') return { ...clearedRuntimeData(merged), batchRunId: undefined, batchCaseIndex: undefined }
   if (merged.kind === 'preview' || merged.kind === 'save') return clearedSinkData(merged)
   if (!EXECUTABLE_NODE_KINDS.has(merged.kind)) return { ...merged, status: 'idle', jobId: undefined, error: undefined, runStartedAt: undefined, runCompletedAt: undefined }
   const {
@@ -871,39 +709,6 @@ function duplicatedNodeData(data: DirectorNodeData, patch: Partial<DirectorNodeD
   return { ...rest, status: 'idle' }
 }
 
-function recomputeSinkPayloads(
-  nodes: readonly DirectorNode[],
-  edges: readonly DirectorEdge[],
-  definitions: readonly VdNodeDefinitionDescriptor[],
-): DirectorNode[] {
-  const sinks = new Set(nodes
-    .filter(node => (
-      (node.data.kind === 'preview' || node.data.kind === 'save')
-      && node.data.frozen !== true
-      && node.data.previewCleared !== true
-    ))
-    .map(node => node.id))
-  if (sinks.size === 0) return [...nodes]
-
-  let current = nodes.map(node => sinks.has(node.id)
-    ? { ...node, data: clearedSinkData(node.data) }
-    : node)
-  for (let pass = 0; pass <= sinks.size; pass += 1) {
-    let changed = false
-    const next = current.map(node => {
-      if (!sinks.has(node.id)) return node
-      const payload = combinedSinkPayload(current, edges, node.id, definitions)
-      if (payload === undefined) return node
-      const data = { ...node.data, ...payload }
-      if (sameJson(data, node.data)) return node
-      changed = true
-      return { ...node, data }
-    })
-    current = next
-    if (!changed) break
-  }
-  return current
-}
 
 export class DirectorController implements ObservableSource<DirectorSnapshot> {
   private snapshot = emptySnapshot()
@@ -919,15 +724,11 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
   private transitionVersion = 0
   private disposed = false
   private readonly jobTimers = new Map<string, ReturnType<typeof setTimeout>>()
+  private hostObservationTimer?: ReturnType<typeof setTimeout>
+  private runRefresh: Promise<void> | null = null
   private readonly activeRuns = new Map<string, ActiveNodeRun>()
-  private readonly vdRunControllers = new Map<string, AbortController>()
-  private readonly vdRunTails = new Map<string, Promise<void>>()
-  private readonly projectCache = new Map<string, { project: VideoProject; dirty: boolean; savedState: ProjectHistoryState | null }>()
-  private taskVersion = 0
-  private taskRequestVersion = 0
-  private readonly activeTriggers = new Map<string, AbortController>()
-  private readonly vdRunSnapshots = new Map<string, Pick<VideoProject, 'name' | 'graph' | 'settings'>>()
-  private readonly vdRunWrites = new Map<string, Promise<unknown>>()
+  private submissionTail: Promise<unknown> = Promise.resolve()
+  private readonly hostSubmissions = new Map<string, Promise<unknown>>()
   private readonly modelRefreshVersions = new Map<string, number>()
   private nodeClipboard: { projectId: string; nodes: DirectorNode[]; edges: DirectorEdge[] } | null = null
   private readonly drafts: ProjectDraftCache
@@ -951,7 +752,7 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
     this.patch({ phase: 'loading', error: null })
     try {
       const [projects, providers, workflows, nodes] = await Promise.all([
-        this.rpc<{ projects: ProjectSummary[] }>('projects/list', {}),
+        this.rpc<{ projects: ProjectSummary[]; projectFolders?: ProjectFolderLayout }>('projects/list', {}),
         this.rpc<{ providers: ProviderDescriptor[] }>('providers/list', {}),
         this.rpc<{ workflows: ComfyWorkflowDescriptor[] }>('workflows/list', {}),
         this.rpc<{ nodeDefinitions: VdNodeDefinitionDescriptor[] }>('nodes/list', {})
@@ -964,6 +765,7 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
       })
       this.patch({
         projects: recoveredProjects,
+        projectFolders: projects.projectFolders,
         providers: providers.providers,
         workflows: workflows.workflows,
         nodeDefinitions: nodes.nodeDefinitions,
@@ -977,7 +779,6 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
       const currentSession = this.ctx.sessions.list.getSnapshot().current
       const selected = projects.projects.find(project => project.sessionId === currentSession) ?? projects.projects[0]
       if (selected !== undefined) await this.loadProject(selected.id, false)
-      void this.refreshTasks().catch(() => {})
       void this.drafts.flush().catch(error => this.patch({ error: errorMessage(error) }))
     } catch (error) {
       this.patch({ phase: 'error', error: errorMessage(error) })
@@ -988,11 +789,7 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
 
   close = (): void => { this.patch({ open: false }) }
 
-  private stopVdRunSchedulers(message: string): void {
-    for (const controller of this.vdRunControllers.values()) controller.abort(message)
-    this.vdRunControllers.clear()
-    for (const controller of this.activeTriggers.values()) controller.abort(message)
-    this.activeTriggers.clear()
+  private stopObservingRuns(message: string): void {
     for (const active of this.activeRuns.values()) active.completion?.reject(new Error(message))
   }
 
@@ -1001,12 +798,13 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
     this.drafts.dispose()
     for (const timer of this.jobTimers.values()) clearTimeout(timer)
     this.jobTimers.clear()
-    this.stopVdRunSchedulers('vd-run scheduler was disposed.')
+    clearTimeout(this.hostObservationTimer)
+    this.stopObservingRuns('Job monitoring was disposed.')
     this.activeRuns.clear()
     this.listeners.clear()
   }
 
-  async createProject(name: string): Promise<void> {
+  async createProject(name: string, location?: { parentId: string | null; expectedRevision: number }): Promise<void> {
     if (this.snapshot.phase === 'loading') {
       throw new Error('Wait for the current project transition to finish before creating another project.')
     }
@@ -1018,7 +816,9 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
       const sessionId = await this.ctx.sessions.create()
       const binding = this.requireSessionBinding(sessionId)
       await this.renameSession(binding, name)
-      const { project } = await this.rpc<{ project: VideoProject }>('projects/create', { name, sessionId, unsaved: true })
+      const { project, projectFolders } = await this.rpc<{ project: VideoProject; projectFolders?: ProjectFolderLayout }>('projects/create', {
+        name, sessionId, unsaved: true, ...(location ? { parentId: location.parentId, expectedFolderRevision: location.expectedRevision } : {}),
+      })
       if (transition !== this.transitionVersion) return
       const projects = [
         { ...project, nodeCount: project.graph.nodes.length },
@@ -1030,7 +830,7 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
       this.editVersion = 0
       this.projectGeneration += 1
       this.ctx.sessions.open(project.sessionId)
-      this.patch({ project, projects, dirty: project.hasSavedVersion === false, saving: false, phase: 'ready' })
+      this.patch({ project, projects, ...(projectFolders ? { projectFolders } : {}), dirty: project.hasSavedVersion === false, saving: false, phase: 'ready' })
     } catch (error) {
       if (transition === this.transitionVersion) this.patch({ phase: 'error', error: errorMessage(error) })
       throw error
@@ -1051,28 +851,96 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
     }
   }
 
-  async refreshVdRuns(): Promise<void> {
-    const project = this.requireProject()
-    const { runs } = await this.rpc<{ runs: VdRun[] }>('vd-runs/list', { projectId: project.id })
-    if (this.snapshot.project?.id !== project.id) return
-    const current = new Map(this.snapshot.workflowRuns.map(run => [run.id, run]))
-    this.patch({ workflowRuns: runs.map(run => current.get(run.id) ?? run)
-      .concat(this.snapshot.workflowRuns.filter(run => !runs.some(saved => saved.id === run.id))) })
+  refreshVdRuns(): Promise<void> {
+    if (this.runRefresh) return this.runRefresh
+    this.runRefresh = this.fetchVdRuns().finally(() => { this.runRefresh = null; this.scheduleHostObservation() })
+    return this.runRefresh
   }
 
-  private async submittedVdWorkflow(runId: string, projectId = this.runProjectId(runId)): Promise<Pick<VideoProject, 'name' | 'graph' | 'settings'>> {
-    const cached = this.vdRunSnapshots.get(runId)
-    if (cached !== undefined) return structuredClone(cached)
+  private scheduleHostObservation(): void {
+    if (this.disposed || this.hostObservationTimer || !this.snapshot.workflowRuns.some(run => run.scheduler === 'host' && ['queued', 'running'].includes(run.status))) return
+    this.hostObservationTimer = setTimeout(() => {
+      this.hostObservationTimer = undefined
+      void this.refreshVdRuns().catch(() => {})
+    }, JOB_POLL_MS)
+  }
+
+  private async fetchVdRuns(): Promise<void> {
+    const [{ runs }, { jobs }, { projects, projectFolders }] = await Promise.all([
+      this.rpc<{ runs: VdRun[] }>('vd-runs/list', {}),
+      this.rpc<{ jobs: DirectorJob[] }>('jobs/list', {}),
+      this.rpc<{ projects: ProjectSummary[]; projectFolders?: ProjectFolderLayout }>('projects/list', {}),
+    ])
+    if (this.disposed) return
+    const previousRuns = this.snapshot.workflowRuns
+    const localRuns = previousRuns.filter(run => this.hostSubmissions.has(run.id) && !runs.some(row => row.id === run.id))
+    const current = this.snapshot.project
+    this.patch({ workflowRuns: [...runs, ...localRuns], jobs, projectFolders, projects: projects.map(project => {
+      const draft = this.drafts.recover(project.id)?.draft
+      return project.id === current?.id ? { ...project, name: current.name, unsaved: this.snapshot.dirty }
+        : draft ? { ...project, name: draft.name, nodeCount: draft.graph.nodes.length, unsaved: true } : project
+    }) })
+    if (current) {
+      if (runs.some(run => run.projectId === current.id && run.status === 'running'
+        && !previousRuns.some(previous => previous.id === run.id && previous.executionStartedAt === run.executionStartedAt && previous.status === 'running'))) this.resetRunStatuses(current.id)
+      const visible = jobs.filter(job => job.projectId === current.id)
+      this.updateVisibleJobs(visible)
+      for (const job of visible) {
+        const previous = current.jobs.find(item => item.id === job.id)
+        const node = this.snapshot.project?.graph.nodes.find(node => node.id === job.nodeId)
+        if (!node || node.data.frozen || job.batchRunId || this.activeRuns.has(this.runKey(job.nodeId))) continue
+        if (previous?.status === job.status && previous?.updatedAt === job.updatedAt) continue
+        this.updateSystemNode(job.nodeId, { jobId: job.id, status: job.status === 'orphaned' ? 'failed' : job.status === 'cancelled' ? 'idle' : job.status,
+          phase: job.phase, progress: job.progress, error: job.error, runStartedAt: job.startedAt, runCompletedAt: job.completedAt })
+        if (job.status === 'completed' && job.result && node.data.mediaEditedFromJobId !== job.id) this.applyJobResult(job.nodeId, job.result)
+      }
+      for (const run of runs.filter(run => run.projectId === current.id && run.kind === 'batch')) {
+        if (this.snapshot.batchCases[run.id] || ['queued', 'running'].includes(run.status)) {
+          const rows = await this.loadBatchCases(run.id)
+          const node = this.snapshot.project?.graph.nodes.find(node => node.id === run.batchInputNodeId)
+          if (node?.data.batchRunId === run.id && !node.data.frozen) this.updateSystemNode(node.id, {
+            status: run.status === 'cancelled' ? 'idle' : run.status, phase: run.status, error: run.error,
+            batchCaseIndex: rows.find(row => row.status === 'running')?.caseIndex ?? rows.filter(row => row.status === 'completed').at(-1)?.caseIndex,
+            progress: rows.length ? rows.filter(row => row.status === 'completed').length / rows.length : 0,
+          })
+        }
+      }
+    }
+  }
+
+  private async waitForPendingNodeSubmissions(projectId: string, signal: AbortSignal): Promise<void> {
+    // A direct job dispatched just before Run must reach the Host queue first.
+    // Otherwise the workflow could reserve the slot its own dependency needs.
+    while ([...this.activeRuns.values()].some(run => run.projectId === projectId && !run.workflowRunId && !run.jobId)) {
+      try { await waitForRunTurn(new Promise<void>(resolve => setTimeout(resolve, 100)), signal) }
+      catch (error) { if (signal.aborted) return; throw error }
+    }
+  }
+
+  private submitToHost(projectId: string, endpoint: string, payload: unknown, provisional: VdRun[]): Promise<{ runs: VdRun[] }> {
+    const request = this.submissionTail.catch(() => {}).then(() => this.waitForPendingNodeSubmissions(projectId, new AbortController().signal))
+      .then(() => this.rpc<{ runs: VdRun[] }>(endpoint, payload))
+    this.submissionTail = request
+    for (const run of provisional) this.hostSubmissions.set(run.id, request)
+    provisional.forEach(run => this.storeVdRun(run))
+    return request.then(result => { result.runs.forEach(run => this.storeVdRun(run)); return result }, error => {
+      this.patch({ workflowRuns: this.snapshot.workflowRuns.filter(run => !provisional.some(item => item.id === run.id)), error: errorMessage(error) })
+      throw error
+    }).finally(() => { for (const run of provisional) this.hostSubmissions.delete(run.id) })
+  }
+
+  private async submittedVdWorkflow(runId: string): Promise<Pick<VideoProject, 'name' | 'graph' | 'settings'>> {
     const { run } = await this.rpc<{ run: VdRun & { snapshot: Pick<VideoProject, 'name' | 'graph' | 'settings'> } }>(
-      'vd-runs/get', { projectId, runId },
+      'vd-runs/get', { projectId: this.snapshot.workflowRuns.find(run => run.id === runId)?.projectId ?? this.requireProject().id, runId },
     )
     return run.snapshot
   }
 
-  async openVdWorkflow(runId: string, projectId = this.runProjectId(runId)): Promise<void> {
+  async openVdWorkflow(runId: string): Promise<void> {
     try {
-      const submitted = await this.submittedVdWorkflow(runId, projectId)
+      const projectId = this.snapshot.workflowRuns.find(run => run.id === runId)?.projectId ?? this.requireProject().id
       await this.selectProject(projectId)
+      const submitted = await this.submittedVdWorkflow(runId)
       if (this.snapshot.project?.id !== projectId) return
       const project = this.requireProject()
       // Opening is an ordinary undoable canvas edit. Execution uses its own graph.
@@ -1083,10 +951,10 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
     }
   }
 
-  async exportVdWorkflow(runId: string, projectId = this.runProjectId(runId)): Promise<ExportedProjectArchive> {
+  async exportVdWorkflow(runId: string): Promise<ExportedProjectArchive> {
     try {
-      const project = await this.projectForAction(projectId)
-      const submitted = await this.submittedVdWorkflow(runId, projectId)
+      const project = await this.projectForAction(this.snapshot.workflowRuns.find(run => run.id === runId)?.projectId ?? this.requireProject().id)
+      const submitted = await this.submittedVdWorkflow(runId)
       const archive = await archiveForProject({ ...project, ...submitted })
       return { filename: projectArchiveFilename(`${submitted.name}-${runId.slice(0, 8)}`), text: `${JSON.stringify(archive, null, 2)}\n` }
     } catch (error) {
@@ -1105,7 +973,11 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
       name = `${project.name.slice(0, Math.max(1, 120 - suffix.length)).trimEnd()}${suffix}`
       copyNumber += 1
     } while (usedNames.has(name.toLocaleLowerCase()))
-    await this.installProjectArchive(name, () => archiveForProject(project))
+    const graph = archivedGraph(project.graph)
+    await this.installProjectArchive(name, async () => ({
+      format: PROJECT_ARCHIVE_FORMAT, version: PROJECT_ARCHIVE_VERSION, exportedAt: new Date().toISOString(),
+      project: { name, graph, settings: structuredClone(project.settings), mediaLibrary: project.mediaLibrary }, assets: [],
+    }), [...collectAssetRefs([graph, project.mediaLibrary]).values()])
   }
 
   async importProject(text: string): Promise<void> {
@@ -1220,76 +1092,51 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
 
   async flushDrafts(): Promise<void> { await this.drafts.flush() }
 
-  private runKey(projectId: string, nodeId: string): string { return `${projectId}:${nodeId}` }
-
-  private cachedProject(projectId?: string): VideoProject | undefined {
-    return this.snapshot.project !== null && this.snapshot.project.id === projectId ? this.snapshot.project : this.projectCache.get(projectId ?? '')?.project
-  }
-
-  private requireRunProject(projectId: string): VideoProject {
-    const project = this.cachedProject(projectId)
-    if (project === undefined) throw new Error(`Workflow ${projectId} is not loaded.`)
-    return project
-  }
-
-  private hasProjectWork(projectId: string): boolean {
-    return [...this.activeRuns.values()].some(run => run.projectId === projectId)
-      || [...this.activeTriggers.keys()].some(key => key.startsWith(`${projectId}:`))
-      || this.snapshot.workflowRuns.some(run => run.projectId === projectId && this.vdRunControllers.has(run.id))
-  }
-
-  private withTaskProject(project: VideoProject): TaskProject[] {
-    const existing = this.snapshot.taskProjects.find(row => row.id === project.id)
-    const row: TaskProject = { id: project.id, name: project.name,
-      nodes: project.graph.nodes.map(node => ({ id: node.id, title: node.data.title })),
-      jobs: project.jobs, runs: existing?.runs ?? [] }
-    return existing === undefined ? [...this.snapshot.taskProjects, row]
-      : this.snapshot.taskProjects.map(value => value.id === project.id ? row : value)
-  }
-
-  async refreshTasks(signal?: AbortSignal): Promise<void> {
-    const request = ++this.taskRequestVersion
-    const version = this.taskVersion
-    const response = await this.rpc<{ projects: TaskProject[] }>('tasks/list', {}, signal)
-    // Do not replace a newer live update with a catalog read that began before it.
-    if (this.disposed || signal?.aborted || request !== this.taskRequestVersion || version !== this.taskVersion) return
-    const projects = response.projects.map(row => {
-      const cached = this.projectCache.get(row.id)
-      return cached && (cached.dirty || this.hasProjectWork(row.id) || row.id === this.snapshot.project?.id)
-        ? { ...row, name: cached.project.name, nodes: cached.project.graph.nodes.map(node => ({ id: node.id, title: node.data.title })) }
-        : row
-    })
-    const runs = new Map(projects.flatMap(project => project.runs).map(run => [run.id, run]))
-    for (const run of this.snapshot.workflowRuns) {
-      if (this.vdRunControllers.has(run.id)) runs.set(run.id, run)
-    }
-    for (const project of projects) {
-      const cached = this.projectCache.get(project.id)
-      if (cached !== undefined) this.projectCache.set(project.id, { ...cached, project: { ...cached.project, jobs: project.jobs } })
-    }
-    const current = this.snapshot.project
-    const jobs = projects.find(project => project.id === current?.id)?.jobs
-    this.patch({ taskProjects: projects, workflowRuns: [...runs.values()],
-      ...(current && jobs && !sameJson(current.jobs, jobs) ? { project: { ...current, jobs } } : {}) })
-  }
-
-  private runProjectId(runId: string): string {
-    return this.snapshot.workflowRuns.find(run => run.id === runId)?.projectId ?? this.requireProject().id
-  }
-
-  private jobProjectId(jobId: string): string {
-    return this.snapshot.taskProjects.find(project => project.jobs.some(job => job.id === jobId))?.id ?? this.requireProject().id
-  }
-
   loadGallery = async (signal?: AbortSignal): Promise<GalleryProject[]> => {
     const { projects } = await this.rpc<{ projects: GalleryProject[] }>('gallery/list', {}, signal)
     return projects
   }
 
+  /** Media edits replace references, never shared bytes or captured generation jobs. */
+  editMedia: EditMedia = async (source, edit, action, signal) => {
+    const before = await this.projectForAction(source.projectId)
+    const owners = before.graph.nodes.filter(node => collectAssetRefs(node.data).has(source.id)).map(node => node.id)
+    const result = await this.rpc<MediaEditResult>('media/edit', { projectId: source.projectId, assetId: source.id, edit, action }, signal)
+    signal.throwIfAborted()
+    if (!('asset' in result)) return result
+    const current = await this.projectForAction(source.projectId)
+    const replacement = result.asset
+    if (owners.length && !current.graph.nodes.some(node => owners.includes(node.id) && collectAssetRefs(node.data).has(source.id))) {
+      throw new Error('The source changed while editing. Reopen its preview and try again.')
+    }
+    const replace = (value: unknown): unknown => {
+      if (isAssetRef(value)) return value.id === source.id ? replacement : value
+      if (Array.isArray(value)) return value.map(replace)
+      if (isObject(value)) return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, replace(item)]))
+      return value
+    }
+    const nodes = current.graph.nodes.map(node => {
+      if (!collectAssetRefs(node.data).has(source.id)) return node
+      const data = replace(node.data) as DirectorNodeData
+      const job = current.jobs.filter(job => job.nodeId === node.id).at(-1)
+      return { ...node, data: { ...data, maskAsset: undefined, trim: { start: 0 }, mediaEditId: replacement.id,
+        ...(job ? { mediaEditedFromJobId: job.id } : {}) } }
+    })
+    const library = (current.mediaLibrary ?? []).filter(asset => action === 'copy' || asset.id !== source.id)
+    if (action === 'copy' && !library.some(asset => asset.id === source.id)) library.push(source)
+    library.push(replacement)
+    const next = { ...current, graph: { ...current.graph, nodes: recomputeSinkPayloads(nodes, current.graph.edges, this.snapshot.nodeDefinitions) }, mediaLibrary: library }
+    if (this.snapshot.project?.id === source.projectId) this.updateProject(next)
+    else {
+      this.drafts.stage(source.projectId, this.historyState(next))
+      this.patch({ projects: this.snapshot.projects.map(row => row.id === source.projectId ? { ...row, unsaved: true } : row) })
+    }
+    await this.drafts.flush(source.projectId)
+    return result
+  }
+
   private async projectForAction(projectId: string): Promise<VideoProject> {
     if (projectId === this.snapshot.project?.id) return structuredClone(this.snapshot.project)
-    const cached = this.projectCache.get(projectId)
-    if (cached && this.hasProjectWork(projectId)) return structuredClone(cached.project)
     await this.drafts.flush(projectId)
     const { project } = await this.rpc<{ project: VideoProject }>('projects/get', { projectId })
     const { draft, ...saved } = project
@@ -1298,12 +1145,6 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
 
   async renameProjectById(projectId: string, name: string): Promise<void> {
     if (projectId === this.snapshot.project?.id) { this.renameProject(name); return }
-    const cached = this.projectCache.get(projectId)
-    if (cached && this.hasProjectWork(projectId)) {
-      this.updateProject({ ...cached.project, name }, 'system-saveable')
-      await this.drafts.flush(projectId)
-      return
-    }
     await this.drafts.flush(projectId)
     const { project: saved } = await this.rpc<{ project: VideoProject }>('projects/get', { projectId })
     const project = { ...saved, ...saved.draft }
@@ -1328,24 +1169,57 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
     }
   }
 
+  async refreshProjectFolders(): Promise<void> {
+    const result = await this.rpc<{ projects: ProjectSummary[]; projectFolders: ProjectFolderLayout }>('projects/list', {})
+    if (!this.disposed) this.patch({ projectFolders: result.projectFolders, projects: this.preserveLocalSummaries(result.projects) })
+  }
+
+  private preserveLocalSummaries(projects: ProjectSummary[]): ProjectSummary[] {
+    return projects.map(project => {
+      if (project.id === this.snapshot.project?.id) return { ...project, name: this.snapshot.project.name, unsaved: this.snapshot.dirty }
+      const draft = this.drafts.recover(project.id)?.draft
+      return draft ? { ...project, name: draft.name, nodeCount: draft.graph.nodes.length, unsaved: true } : project
+    })
+  }
+
+  async organizeProjects(change: ProjectFolderChange): Promise<void> {
+    const deleting = (change.action === 'delete' && change.mode === 'delete-workflows')
+      || (change.action === 'batch-delete' && (change.projectIds.length > 0 || change.mode === 'delete-workflows'))
+    if (this.snapshot.saving || this.snapshot.phase === 'loading') throw new Error('Wait for the current project operation to finish.')
+    if (deleting) this.patch({ phase: 'loading' })
+    try {
+      if (deleting) await this.drafts.flush()
+      const result = await this.rpc<{ projects: ProjectSummary[]; projectFolders: ProjectFolderLayout; deletedProjectIds: string[] }>('projects/organize', change)
+      for (const id of result.deletedProjectIds) this.drafts.forget(id)
+      const deletedCurrent = this.snapshot.project && result.deletedProjectIds.includes(this.snapshot.project.id)
+      this.patch({ projectFolders: result.projectFolders, projects: this.preserveLocalSummaries(result.projects), ...(deleting ? { phase: 'ready' as const } : {}) })
+      if (deletedCurrent) {
+        this.projectGeneration++
+        this.baseProject = null; this.savedState = null; this.editVersion = 0; this.resetHistory()
+        this.patch({ project: null, dirty: false, conflict: false, canvasResetVersion: this.snapshot.canvasResetVersion + 1 })
+        if (result.projects[0]) await this.loadProject(result.projects[0].id, true)
+      }
+    } catch (error) {
+      if (deleting) this.patch({ phase: 'ready' })
+      await this.refreshProjectFolders().catch(() => {})
+      throw error
+    }
+  }
+
   async discardChanges(projectId = this.snapshot.project?.id): Promise<void> {
     if (projectId === undefined) return
     if (this.snapshot.saving || this.snapshot.phase === 'loading') throw new Error('Wait for the current project operation before discarding changes.')
     const current = this.snapshot.project?.id === projectId
-    if (this.hasProjectWork(projectId)) throw new Error('Wait for tasks to finish or cancel them before discarding changes.')
+    if ([...this.activeRuns.values()].some(run => run.projectId === projectId)
+      || this.snapshot.workflowRuns.some(run => run.projectId === projectId && ['queued', 'running'].includes(run.status))) {
+      throw new Error('Wait for tasks in this workflow to finish or cancel them before discarding changes.')
+    }
     this.patch({ phase: 'loading', error: null })
     try {
       await this.drafts.flush(projectId)
       const result = await this.rpc<{ project: VideoProject | null; projects: ProjectSummary[] }>('projects/discard', { projectId })
       this.drafts.forget(projectId)
-      this.projectCache.delete(projectId)
-      this.patch({
-        ...(result.project === null ? {
-          taskProjects: this.snapshot.taskProjects.filter(row => row.id !== projectId),
-          workflowRuns: this.snapshot.workflowRuns.filter(run => run.projectId !== projectId),
-        } : { taskProjects: this.withTaskProject(result.project) }),
-        projects: result.projects, phase: 'ready',
-      })
+      this.patch({ projects: result.projects, phase: 'ready' })
       if (!current) return
       this.resetHistory()
       this.baseProject = null
@@ -1370,7 +1244,6 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
       throw new Error(`Project ${projectId} was not found.`)
     }
 
-    if (this.hasProjectWork(projectId)) throw new Error('Wait for tasks to finish or cancel them before deleting this workflow.')
     const transition = ++this.transitionVersion
     const deletingCurrent = this.snapshot.project?.id === projectId
     this.patch({ phase: 'loading', error: null, conflict: false })
@@ -1378,8 +1251,6 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
       await this.drafts.flush(projectId)
       const result = await this.rpc<{ projects?: ProjectSummary[] }>('projects/delete', { projectId })
       this.drafts.forget(projectId)
-      this.projectCache.delete(projectId)
-      this.patch({ taskProjects: this.snapshot.taskProjects.filter(project => project.id !== projectId), workflowRuns: this.snapshot.workflowRuns.filter(run => run.projectId !== projectId) })
       if (transition !== this.transitionVersion) return
       const projects = result.projects ?? this.snapshot.projects.filter(project => project.id !== projectId)
       if (!deletingCurrent) {
@@ -1576,13 +1447,17 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
     const project = this.requireProject()
     const node = project.graph.nodes.find(candidate => candidate.id === nodeId)
     if (node === undefined) throw new Error(`Node ${nodeId} was not found.`)
-    if (node.data.status === 'queued' || node.data.status === 'running' || this.activeRuns.has(this.runKey(project.id, nodeId))) {
+    if (node.data.status === 'queued' || node.data.status === 'running' || this.activeRuns.has(this.runKey(nodeId))) {
       throw new Error('Cancel the active job before changing this node\'s Freeze state.')
     }
     if (node.data.frozen === frozen) return
     const clearMissingResultError = !frozen && node.data.phase === 'frozen-missing-result'
+    const rows = node.data.batchRunId ? this.snapshot.batchCases[node.data.batchRunId] : undefined
+    const frozenCase = node.data.batchFollow !== false ? [...(rows ?? [])].reverse().find(row => row.status !== 'pending') ?? rows?.[0]
+      : rows?.find(row => row.caseIndex === node.data.batchCaseIndex)
     this.updateNode(nodeId, {
       frozen,
+      ...(node.data.kind === 'batch-output' ? { batchFrozenCase: frozen && frozenCase ? structuredClone(frozenCase) : undefined } : {}),
       ...(clearMissingResultError
         ? { status: 'idle', phase: undefined, progress: undefined, error: undefined, jobId: undefined }
         : {}),
@@ -1594,7 +1469,7 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
     const ids = new Set(nodeIds)
     const targets = project.graph.nodes.filter(node => ids.has(node.id))
     if (targets.length === 0) return
-    if (targets.some(node => node.data.status === 'queued' || node.data.status === 'running' || this.activeRuns.has(this.runKey(project.id, node.id)))) {
+    if (targets.some(node => node.data.status === 'queued' || node.data.status === 'running' || this.activeRuns.has(this.runKey(node.id)))) {
       throw new Error('Cancel active jobs before changing the selected nodes’ Freeze state.')
     }
     const frozen = !targets.every(node => node.data.frozen === true)
@@ -1686,9 +1561,11 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
     this.updateGraph(nodes, edges, project.graph.viewport)
   }
 
+  private runKey(nodeId: string, projectId = this.snapshot.project?.id): string { return `${projectId}:${nodeId}` }
+
   private updateSystemNode(nodeId: string, patch: Partial<DirectorNodeData>, projectId = this.snapshot.project?.id): void {
-    const project = this.cachedProject(projectId)
-    if (project == null) return
+    const project = this.snapshot.project
+    if (project === null || project.id !== projectId) return
     const nodes = project.graph.nodes.map(node => node.id === nodeId
       ? { ...node, data: { ...node.data, ...patch } }
       : node)
@@ -1700,10 +1577,11 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
   }
 
   /** Begin a new run display without discarding cached outputs or interrupting other jobs. */
-  private resetRunStatuses(projectId = this.requireProject().id): void {
-    const project = this.requireRunProject(projectId)
+  private resetRunStatuses(projectId = this.snapshot.project?.id): void {
+    if (this.snapshot.project?.id !== projectId) return
+    const project = this.requireProject()
     const nodes = project.graph.nodes.map(node => {
-      if (node.data.frozen === true || this.activeRuns.has(this.runKey(project.id, node.id)) || node.data.status === 'running') return node
+      if (node.data.frozen === true || this.activeRuns.has(this.runKey(node.id)) || node.data.status === 'running') return node
       return { ...node, data: { ...node.data, status: 'idle' as const,
         phase: undefined, progress: undefined, error: undefined, jobId: undefined,
         runStartedAt: undefined, runCompletedAt: undefined } }
@@ -1712,19 +1590,22 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
   }
 
   private updateVisibleJob(job: DirectorJob): void {
-    const project = this.cachedProject(job.projectId)
-    this.taskVersion += 1
-    if (project == null) {
-      this.patch({ taskProjects: this.snapshot.taskProjects.map(row => row.id === job.projectId
-        ? { ...row, jobs: [...row.jobs.filter(candidate => candidate.id !== job.id), job] } : row) })
-      return
-    }
+    this.patch({ jobs: [...this.snapshot.jobs.filter(row => row.id !== job.id), job] })
+    const project = this.snapshot.project
+    if (project === null || job.projectId !== project.id) return
     const existing = project.jobs.findIndex(candidate => candidate.id === job.id)
     const jobs = (existing < 0
       ? [...project.jobs, job]
       : project.jobs.map((candidate, index) => index === existing ? job : candidate))
       .sort((left, right) => (left.runSequence ?? 0) - (right.runSequence ?? 0))
       .slice(-100)
+    this.updateVisibleJobs(jobs)
+  }
+
+  private updateVisibleJobs(jobs: DirectorJob[]): void {
+    const project = this.snapshot.project
+    if (!project) return
+    if (jobs.length === 0 && project.jobs.length === 0) return
     const active = jobs.some(candidate => candidate.status === 'queued' || candidate.status === 'running')
     const latest = jobs.at(-1)
     const status: VideoProject['status'] = active
@@ -1736,25 +1617,8 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
   }
 
   private storeVdRun(run: VdRun): void {
-    this.taskVersion += 1
     const workflowRuns = [run, ...this.snapshot.workflowRuns.filter(candidate => candidate.id !== run.id)]
     this.patch({ workflowRuns, error: null })
-  }
-
-  private patchVdRun(id: string, patch: Partial<VdRun>): void {
-    this.taskVersion += 1
-    const workflowRuns = this.snapshot.workflowRuns.map(run => run.id === id ? { ...run, ...patch } : run)
-    this.patch({ workflowRuns })
-  }
-
-  private persistVdRun(run: VdRun, snapshot?: Pick<VideoProject, 'name' | 'graph' | 'settings'>): Promise<unknown> {
-    const previous = this.vdRunWrites.get(run.id) ?? Promise.resolve()
-    const submittedRun = structuredClone(run)
-    const write = previous.catch(() => {}).then(() => this.rpc('vd-runs/save', {
-      projectId: run.projectId, run: submittedRun, ...(snapshot === undefined ? {} : { snapshot }),
-    }))
-    this.vdRunWrites.set(run.id, write)
-    return write
   }
 
   addText(text: string, position?: { x: number; y: number }): void {
@@ -1779,6 +1643,11 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
       data: { kind: 'load-text', mediaKind: 'text', title: 'Text', text: '', status: 'idle' },
     }
     this.updateGraph([...project.graph.nodes, node], project.graph.edges, project.graph.viewport)
+  }
+
+  addInputNode(kind: 'image' | 'audio' | 'video' | 'sketch', position?: CanvasPosition): string {
+    return this.addCreatedNode({ id: crypto.randomUUID(), type: 'director', position: position ?? this.nextPosition(),
+      data: { kind: `load-${kind}`, mediaKind: kind, title: nodeTitle(kind), status: 'idle' } })
   }
 
   private addCreatedNode(node: DirectorNode, incoming?: IncomingNodeConnection): string {
@@ -1859,20 +1728,20 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
     const project = this.requireProject()
     const projectGeneration = this.projectGeneration
     const node = project.graph.nodes.find(candidate => candidate.id === nodeId)
-    if (node === undefined || !['load-text', 'load-image', 'load-video'].includes(node.data.kind)) {
-      throw new Error('Choose a text, image, or video input node.')
+    const kind = node === undefined ? undefined : inputFileKind(node.data.kind)
+    if (node === undefined || kind === undefined) {
+      throw new Error('Choose a text, image, audio, or video input node.')
     }
     let patch: Partial<DirectorNodeData>
-    if (node.data.kind === 'load-text') {
-      if (!file.type.startsWith('text/') && !/\.(txt|md|markdown|csv|json|srt|vtt|log)$/iu.test(file.name)) {
+    if (kind === 'text') {
+      if (!isTextFile(file)) {
         throw new Error('Choose a UTF-8 text file.')
       }
       const text = new TextDecoder('utf-8', { fatal: true }).decode(await file.arrayBuffer())
       if (text.includes('\0')) throw new Error('Choose a UTF-8 text file.')
       patch = { text }
     } else {
-      const kind = node.data.kind === 'load-image' ? 'image' : 'video'
-      if (fileKind(file) !== kind) throw new Error(kind === 'image' ? 'Choose an image file for this input.' : 'Choose a video file for this input.')
+      if (fileKind(file) !== kind) throw new Error(`Choose ${kind === 'video' ? 'a' : 'an'} ${kind} file for this input.`)
       const { asset } = await this.rpc<{ asset: AssetRef }>('assets/put', {
         projectId: project.id,
         kind,
@@ -1882,7 +1751,7 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
       })
       patch = {
         asset, mediaKind: kind, assets: undefined, maskAsset: undefined,
-        trim: kind === 'video' ? { start: 0 } : undefined,
+        trim: kind === 'audio' || kind === 'video' ? { start: 0 } : undefined,
         result: undefined, status: 'idle', phase: undefined, progress: undefined,
         jobId: undefined, error: undefined,
         runStartedAt: undefined, runCompletedAt: undefined,
@@ -1898,6 +1767,37 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
       throw new Error('The input changed before the file could be attached. Choose the file again.')
     }
     this.updateNode(nodeId, patch)
+  }
+
+  async listInputAssets(kind: 'image' | 'audio' | 'video' | 'sketch'): Promise<AssetRef[]> {
+    const project = this.requireProject()
+    return (await this.rpc<{ assets: AssetRef[] }>('assets/list', { kind, projectId: project.id })).assets
+  }
+
+  async useExistingAsset(nodeId: string, source: AssetRef): Promise<void> {
+    const project = this.requireProject()
+    const generation = this.projectGeneration
+    const node = project.graph.nodes.find(candidate => candidate.id === nodeId)
+    if (!node || !['image', 'audio', 'video', 'sketch'].includes(source.kind) || node.data.kind !== `load-${source.kind}`) {
+      throw new Error('Choose an asset that matches the input type.')
+    }
+    if (node.data.asset?.id === source.id) return
+    const { asset } = await this.rpc<{ asset: AssetRef }>('assets/link', { projectId: project.id, sourceId: source.id })
+    if (asset.kind !== source.kind) throw new Error('The selected asset does not match the input type.')
+    const current = this.snapshot.project
+    const target = current?.graph.nodes.find(candidate => candidate.id === nodeId)
+    if (current?.id !== project.id || generation !== this.projectGeneration || this.snapshot.phase === 'loading'
+      || target?.data.kind !== node.data.kind || target?.data.asset?.id !== node.data.asset?.id
+      || !sameJson(target?.data.sketchDocument, node.data.sketchDocument)) {
+      throw new Error('The input changed before the asset could be attached. Choose the asset again.')
+    }
+    this.updateNode(nodeId, {
+      asset, mediaKind: asset.kind, assets: undefined, maskAsset: undefined, sketchDocument: undefined,
+      trim: asset.kind === 'audio' || asset.kind === 'video' ? { start: 0 } : undefined,
+      mediaEditId: undefined, mediaEditedFromJobId: undefined,
+      result: undefined, status: 'idle', phase: undefined, progress: undefined,
+      jobId: undefined, error: undefined, runStartedAt: undefined, runCompletedAt: undefined,
+    })
   }
 
   async uploadDerived(file: File, kind: 'sketch' | 'mask'): Promise<AssetRef> {
@@ -1940,10 +1840,10 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
     if (ids.size === 0) return
     const targets = project.graph.nodes.filter(node => ids.has(node.id))
     if (targets.length === 0) return
-    const running = targets.find(node => node.data.status === 'queued' || node.data.status === 'running' || this.activeRuns.has(this.runKey(project.id, node.id)))
+    const running = targets.find(node => node.data.status === 'queued' || node.data.status === 'running' || this.activeRuns.has(this.runKey(node.id)))
     if (running !== undefined) throw new Error(`Cancel ${running.data.title} before deleting it.`)
     for (const node of targets) {
-      this.activeRuns.delete(this.runKey(project.id, node.id))
+      this.activeRuns.delete(this.runKey(node.id))
       if (node.data.jobId === undefined) continue
       const timer = this.jobTimers.get(node.data.jobId)
       if (timer !== undefined) clearTimeout(timer)
@@ -2017,7 +1917,13 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
       candidate.type === type && (version === undefined || candidate.version === version)
     ))
     if (definition === undefined) throw new Error(`Node definition ${type}${version === undefined ? '' : `@${version}`} was not found`)
-    if (definition.behavior === 'preview' || definition.behavior === 'save' || definition.behavior === 'trigger') {
+    if (definition.behavior === 'media') {
+      return this.addCreatedNode({ id: crypto.randomUUID(), type: 'director', position: position ?? this.nextPosition(),
+        data: { kind: definition.operation!, title: definition.title, providerId: 'ffmpeg',
+          nodeType: definition.type, nodeVersion: definition.version, nodeDigest: definition.digest, status: 'idle',
+          mediaOptions: Object.fromEntries(definition.fields.filter(field => typeof field.default === 'number').map(field => [field.id, field.default as number])) } }, incoming)
+    }
+    if (definition.behavior === 'preview' || definition.behavior === 'save' || definition.behavior === 'trigger' || definition.behavior === 'batch-input' || definition.behavior === 'batch-output') {
       const kind = definition.behavior === 'trigger' ? definition.triggerAction : definition.behavior
       if (kind === undefined) throw new Error(`Trigger ${definition.type}@${definition.version} has no action`)
       const node: DirectorNode = {
@@ -2032,6 +1938,7 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
           nodeDigest: definition.digest,
           status: 'idle',
           ...(definition.behavior === 'save' ? { outputName: '' } : {}),
+          ...(kind === 'batch-input' ? { batch: { source: 'text' as const, text: '', startIndex: 1, sort: 'input' as const, recursive: true, errorPolicy: 'stop' as const } } : {}),
           ...(kind === 'vram-trigger'
             ? { vramAction: 'skip', vramReleaseWaitSeconds: 10, vramActionInitialized: false }
             : {}),
@@ -2068,18 +1975,23 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
     return this.addCreatedNode(node, incoming)
   }
 
-  async runNode(nodeId: string, projectId = this.requireProject().id): Promise<void> {
-    if (projectId !== this.snapshot.project?.id) await this.selectProject(projectId)
-    if (this.activeTriggers.has(this.runKey(projectId, nodeId)) || this.activeRuns.get(this.runKey(projectId, nodeId))?.workflowRunId !== undefined) {
+  async runNode(nodeId: string): Promise<void> {
+    if (this.activeRuns.get(this.runKey(nodeId))?.workflowRunId !== undefined) {
       throw new Error('This node is executing a submitted workflow. Queue another workflow or cancel its current run first.')
     }
-    const node = this.requireProject().graph.nodes.find(candidate => candidate.id === nodeId)
+    const project = this.requireProject()
+    const node = project.graph.nodes.find(candidate => candidate.id === nodeId)
     if (node === undefined) throw new Error(`Node ${nodeId} was not found`)
+    if (node.data.kind === 'batch-input') { await this.runBatch(nodeId); return }
+    if (this.snapshot.workflowRuns.some(run => run.projectId === project.id
+      && (run.status === 'running' || run.status === 'queued') && run.nodeIds.includes(nodeId))) {
+      throw new Error('This node is part of a submitted workflow. Queue another workflow or cancel its current run first.')
+    }
     if (isTriggerNodeKind(node.data.kind)) {
-      await this.submitTriggerRun(nodeId, { projectId })
+      await this.submitTriggerRun(nodeId)
       return
     }
-    await this.submitNodeRun(nodeId, { projectId })
+    await this.submitNodeRun(nodeId)
   }
 
   async runDependencies(nodeId: string): Promise<string> {
@@ -2087,20 +1999,17 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
   }
 
   private async submitTriggerRun(nodeId: string, options: NodeRunOptions = {}): Promise<void> {
-    if (options.workflowRunId === undefined && (this.snapshot.saving || this.snapshot.phase === 'loading')) {
+    if (options.project === undefined && (this.snapshot.saving || this.snapshot.phase === 'loading')) {
       throw new Error('Wait for the current project operation before running a trigger node.')
     }
-    const project = this.requireRunProject(options.projectId ?? this.requireProject().id)
+    const project = options.project ?? this.requireProject()
+    const updateNode = (patch: Partial<DirectorNodeData>): void => this.updateSystemNode(nodeId, patch, project.id)
     const executionGraph = options.graph ?? project.graph
     const node = executionGraph.nodes.find(candidate => candidate.id === nodeId)
     if (node === undefined) throw new Error(`Node ${nodeId} was not found`)
     if (!isTriggerNodeKind(node.data.kind)) throw new Error(`${node.data.title} is not a trigger node.`)
     if (node.data.frozen === true) throw new Error(`${node.data.title} is frozen. Unfreeze it before running the node directly.`)
     if (signalAborted(options.signal)) throw new Error('vd-run was cancelled.')
-    const key = this.runKey(project.id, nodeId)
-    const trigger = new AbortController()
-    const signal = options.signal ?? trigger.signal
-    this.activeTriggers.set(key, trigger)
     try {
       validateTriggerNodeConnections(executionGraph, nodeId)
       const definition = nodeDefinition(node.data, this.snapshot.nodeDefinitions)
@@ -2112,9 +2021,9 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
         && node.data.vramReleaseWaitSeconds! <= 300
         ? node.data.vramReleaseWaitSeconds
         : 10
-      if (options.workflowRunId === undefined) this.resetRunStatuses(project.id)
+      if (options.workflowRunId === undefined) this.resetRunStatuses()
       const runStartedAt = new Date().toISOString()
-      this.updateSystemNode(nodeId, {
+      updateNode({
         status: 'running',
         runStartedAt,
         runCompletedAt: undefined,
@@ -2124,10 +2033,10 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
         progress: 0.5,
         error: undefined,
         jobId: undefined,
-      }, project.id)
-      await this.rpc('triggers/run', { action, releaseWaitSeconds }, signal)
-      if (signalAborted(signal)) throw new Error('vd-run was cancelled.')
-      this.updateSystemNode(nodeId, {
+      })
+      await this.rpc('triggers/run', { action, releaseWaitSeconds }, options.signal)
+      if (signalAborted(options.signal)) throw new Error('vd-run was cancelled.')
+      updateNode({
         status: 'completed',
         runStartedAt,
         runCompletedAt: new Date().toISOString(),
@@ -2135,185 +2044,59 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
         progress: 1,
         error: undefined,
         jobId: undefined,
-      }, project.id)
+      })
     } catch (error) {
-      this.updateSystemNode(nodeId, {
-        status: signalAborted(signal) ? 'idle' : 'failed',
-        phase: signalAborted(signal) ? 'cancelled' : 'trigger-failed',
+      updateNode({
+        status: signalAborted(options.signal) ? 'idle' : 'failed',
+        phase: signalAborted(options.signal) ? 'cancelled' : 'trigger-failed',
         progress: 0,
         error: errorMessage(error),
         jobId: undefined,
-      }, project.id)
+      })
       throw error
-    } finally {
-      if (this.activeTriggers.get(key) === trigger) this.activeTriggers.delete(key)
     }
   }
 
   private async submitNodeRun(nodeId: string, options: NodeRunOptions = {}): Promise<ActiveNodeRun> {
-    if (options.workflowRunId === undefined && (this.snapshot.saving || this.snapshot.phase === 'loading')) {
+    if (options.project === undefined && (this.snapshot.saving || this.snapshot.phase === 'loading')) {
       throw new Error('Wait for the current project operation before running a vd-node.')
     }
-    const project = this.requireRunProject(options.projectId ?? this.requireProject().id)
-    const sourceGraph = options.graph ?? project.graph
-    const storedNode = sourceGraph.nodes.find(candidate => candidate.id === nodeId)
-    if (storedNode === undefined) throw new Error(`Node ${nodeId} was not found`)
-    const effectiveData = withDefaultRegisteredImageWorkflow(
-      storedNode.data,
-      this.snapshot.providers,
-      this.snapshot.workflows,
-    )
-    const node = effectiveData === storedNode.data ? storedNode : { ...storedNode, data: effectiveData }
-    const executionGraph = node === storedNode
-      ? sourceGraph
-      : {
-          ...sourceGraph,
-          nodes: sourceGraph.nodes.map(candidate => candidate.id === nodeId ? node : candidate),
-        }
-    if (node.data.frozen === true) {
-      throw new Error(`${node.data.title} is frozen. Unfreeze it before running the node directly.`)
-    }
-    if (signalAborted(options.signal)) throw new Error('vd-run was cancelled.')
+    const project = options.project ?? this.requireProject()
+    const updateNode = (patch: Partial<DirectorNodeData>): void => this.updateSystemNode(nodeId, patch, project.id)
+    const projectGeneration = this.projectGeneration
+    let node: DirectorNode
     const clientRunId = crypto.randomUUID()
     let request: Record<string, unknown>
     try {
-      if (node.data.kind === 'preview' || node.data.kind === 'save') {
-        throw new Error(`${node.data.title} is a local output sink and does not run a remote job.`)
-      }
-      const inputEdges = executionGraph.edges.filter(edge => edge.target === nodeId
-        && !isTriggerNodeKind(executionGraph.nodes.find(candidate => candidate.id === edge.source)?.data.kind ?? 'load-text'))
-      validateNodeInputPorts(executionGraph, this.snapshot.nodeDefinitions, nodeId)
-      const mappedInputs = inputEdges.map(edge => {
-        const candidate = executionGraph.nodes.find(row => row.id === edge.source)
-        if (candidate === undefined) throw new Error(`Connection source ${edge.source} was not found.`)
-        const ports = resolveEdgePorts(executionGraph, this.snapshot.nodeDefinitions, edge)
-        const outputTypes = inferredNodeOutputTypes(candidate)
-        const mediaType = ports.targetTypes.length === 1 && ports.targetTypes[0] === 'mask'
-          ? 'mask'
-          : candidate.data.asset?.kind ?? candidate.data.mediaKind ?? outputTypes.find(type => ports.targetTypes.includes(type))
-        const asset = candidate.data.assets?.find(value => ports.sourceTypes.includes(value.kind)) ?? candidate.data.asset
-        return {
-          nodeId: candidate.id,
-          kind: candidate.data.kind,
-          mediaType,
-          sourcePortId: ports.sourcePortId,
-          targetPortId: ports.targetPortId,
-          text: candidate.data.text,
-          prompt: candidate.data.prompt,
-          assetId: asset?.id,
-          assetName: asset?.name,
-          maskAssetId: candidate.data.maskAsset?.id,
-          trim: candidate.data.trim,
-          transform: candidate.data.transform,
-          role: edge?.data?.role ?? candidate.data.referenceRole ?? 'visual',
-          includeAudio: edge?.data?.includeAudio ?? candidate.data.includeAudio ?? false,
-        }
-      })
-      const mediaInputs = [
-        ...mappedInputs.filter(input => !isFieldInputPort(input.targetPortId)),
-        ...mappedInputs.filter(input => isFieldInputPort(input.targetPortId)),
-      ]
-      const definition = nodeDefinition(node.data, this.snapshot.nodeDefinitions)
-      const resolvedParameters = resolveParameterInputs(node.data, definition, mediaInputs)
-      if (node.data.kind === 'prompt-enhancer'
-        && (typeof resolvedParameters.prompt !== 'string' || resolvedParameters.prompt.trim() === '')) {
-        throw new Error('Enter a prompt before running this node.')
-      }
-      const fieldInputModes = activeFieldInputModes(node.data, definition)
-      const assetIds = [...new Set(mediaInputs.flatMap(candidate => [candidate.assetId, candidate.maskAssetId]
-        .filter((value): value is string => value !== undefined)))]
-      const context = JSON.stringify(mediaInputs.filter(input => !isFieldInputPort(input.targetPortId)))
-      const selectedProvider = this.snapshot.providers.find(provider => provider.id === node.data.providerId)
-      const selectedModel = selectedProvider?.kind === 'ollama'
-        ? effectiveOllamaModel(selectedProvider.availableModels ?? [], selectedProvider.model, node.data.modelId)
-        : selectedProvider?.kind === 'codex-plan'
-          ? codexModelForNode(node.data, selectedProvider)
-          : node.data.modelId ?? (node.data.modelFamily === 'minimax-h3' ? undefined : node.data.modelFamily)
-      const selectedModelDetails = selectedProvider?.modelDetails?.find(details => details.id === selectedModel)
-      if (node.data.contextLength !== undefined && selectedModelDetails?.contextLength !== undefined
-        && node.data.contextLength > selectedModelDetails.contextLength) {
-        throw new Error(`Context length cannot exceed ${String(selectedModelDetails.contextLength)} tokens for ${selectedModel}.`)
-      }
-      const submittedPrompt = node.data.kind === 'image-generation'
-        && (selectedProvider?.kind === 'codex-plan' || node.data.providerId === 'codex-plan')
-        ? `${node.data.imageMode === 'edit' ? '$Edit Image$' : '$Create Image$'}\n${String(resolvedParameters.prompt ?? '')}`
-        : resolvedParameters.prompt
-      const submittedSeed = node.data.seedControlAfterGenerate === 'randomize'
-        ? undefined
-        : options.seed ?? node.data.seed
-      request = structuredClone({
-        providerId: node.data.providerId,
-        operation: node.data.kind,
-        modelFamily: node.data.modelFamily,
-        model: selectedModel,
-        prompt: submittedPrompt,
-        negativePrompt: resolvedParameters.negativePrompt,
-        systemPrompt: node.data.kind === 'prompt-enhancer'
-          ? (node.data.systemPrompt ?? DEFAULT_TEXT_WORKFLOW_SYSTEM_PROMPT)
-          : node.data.systemPrompt,
-        contextLength: selectedProvider?.kind === 'ollama' ? node.data.contextLength : undefined,
-        thinking: selectedProvider?.kind === 'ollama' && ollamaModelSupports(selectedProvider.modelDetails, selectedModel, 'thinking')
-          ? node.data.thinking
-          : undefined,
-        context,
-        assetIds,
-        workflow: node.data.workflow,
-        bindings: (node.data.bindings ?? []).map((binding) => {
-          if (binding.assetId !== undefined) return binding
-          const mediaIndex = binding.portId === undefined
-            ? (binding.mediaIndex ?? 0)
-            : mediaInputs
-                .map((input, index) => ({ input, index }))
-                .filter(candidate => candidate.input.targetPortId === binding.portId)
-                .filter(candidate => binding.referenceKind === undefined || candidate.input.mediaType === binding.referenceKind)[binding.portIndex ?? 0]?.index
-          const media = mediaIndex === undefined ? undefined : mediaInputs[mediaIndex]
-          if (binding.from === 'asset' && media?.assetId !== undefined) return { ...binding, mediaIndex, assetId: media.assetId }
-          if (binding.from === 'maskAsset' && media?.maskAssetId !== undefined) return { ...binding, mediaIndex, assetId: media.maskAssetId }
-          return binding
-        }),
-        workflowId: node.data.workflowId,
-        workflowValues: resolvedParameters.workflowValues,
-        videoMode: node.data.videoMode,
-        fieldInputModes,
-        seed: submittedSeed,
-        width: node.data.width,
-        height: node.data.height,
-        duration: node.data.duration,
-        fps: node.data.fps,
-        variant: node.data.variant,
-        steps: node.data.steps,
-        scheduler: node.data.scheduler,
-        mediaInputs,
-        workflowRunId: options.workflowRunId,
-        workflowRunMode: options.workflowRunMode,
-        batchIndex: options.batchIndex,
-        batchSize: options.batchSize,
-      })
+      if (signalAborted(options.signal)) throw new Error('vd-run was cancelled.')
+      ;({ node, request } = prepareNodeRequest(project, nodeId, this.snapshot, options))
     } catch (error) {
-      this.updateSystemNode(nodeId, {
+      updateNode({
         status: 'failed',
         phase: 'validation-failed',
         progress: 0,
         error: errorMessage(error),
         jobId: undefined,
-      }, project.id)
+      })
       throw error
     }
-    if (options.workflowRunId === undefined) this.resetRunStatuses(project.id)
+    if (options.workflowRunId === undefined) this.resetRunStatuses()
     const activeRun: ActiveNodeRun = {
       projectId: project.id,
+      projectGeneration,
       clientRunId,
       seedStateAtSubmission: {
         seed: node.data.seed,
         control: node.data.seedControlAfterGenerate,
       },
       workflowRunId: options.workflowRunId,
+      suppressSeedUpdate: options.suppressSeedUpdate,
       completion: options.awaitCompletion === true ? activeRunCompletion() : undefined,
     }
-    this.activeRuns.get(this.runKey(project.id, nodeId))?.completion?.reject(new Error(`${node.data.title} was superseded by a newer run.`))
-    this.activeRuns.set(this.runKey(project.id, nodeId), activeRun)
-    this.updateSystemNode(nodeId, { status: 'queued', phase: 'submitting', progress: 0, error: undefined, jobId: undefined,
-      runStartedAt: undefined, runCompletedAt: undefined }, project.id)
+    this.activeRuns.get(this.runKey(nodeId, project.id))?.completion?.reject(new Error(`${node.data.title} was superseded by a newer run.`))
+    this.activeRuns.set(this.runKey(nodeId, project.id), activeRun)
+    updateNode({ status: 'queued', phase: 'submitting', progress: 0, error: undefined, jobId: undefined,
+      runStartedAt: undefined, runCompletedAt: undefined })
     try {
       const { job } = await this.rpc<{ job: DirectorJob }>('jobs/start', {
         projectId: project.id,
@@ -2331,8 +2114,8 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
       if (!this.isActiveRun(nodeId, activeRun)) return activeRun
       activeRun.jobId = job.id
       this.updateVisibleJob(job)
-      this.updateSystemNode(nodeId, { jobId: job.id, status: job.status === 'running' ? 'running' : 'queued', phase: job.phase,
-        progress: job.progress, runStartedAt: job.startedAt, runCompletedAt: undefined }, project.id)
+      updateNode({ jobId: job.id, status: job.status === 'running' ? 'running' : 'queued', phase: job.phase,
+        progress: job.progress, runStartedAt: job.startedAt, runCompletedAt: undefined })
       this.scheduleJobPoll(job.id, nodeId, 0, activeRun)
       if (signalAborted(options.signal)) await this.cancelJob(job.id, project.id)
     } catch (error) {
@@ -2340,20 +2123,23 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
       // poller so the submitted job can still be observed and cancelled again.
       if (activeRun.jobId !== undefined && (error as RemoteFailure).code === 'video-director/cancel-request-failed') throw error
       if (this.isActiveRun(nodeId, activeRun)) {
-        this.activeRuns.delete(this.runKey(project.id, nodeId))
-        this.updateSystemNode(nodeId, {
+        this.activeRuns.delete(this.runKey(nodeId, project.id))
+        updateNode({
           status: 'failed',
           phase: 'submission-failed',
           progress: 0,
           error: errorMessage(error),
-        }, project.id)
+        })
+      }
+      if (options.batchRunId && activeRun.jobId === undefined && (error as RemoteFailure).code !== 'video-director/invalid-input') {
+        throw Object.assign(new Error(`Submission receipt is uncertain. Inspect this case's jobs before retrying. ${errorMessage(error)}`), { code: 'video-director/submission-unknown' })
       }
       throw error
     }
     return activeRun
   }
 
-  async cancelJob(jobId: string, projectId = this.jobProjectId(jobId)): Promise<void> {
+  async cancelJob(jobId: string, projectId = this.snapshot.jobs.find(job => job.id === jobId)?.projectId ?? this.requireProject().id): Promise<void> {
     try {
       const { job } = await this.rpc<{ job: DirectorJob }>('jobs/cancel', { projectId, jobId })
       this.updateVisibleJob(job)
@@ -2364,13 +2150,12 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
     }
   }
 
-  async deleteJob(jobId: string, projectId = this.jobProjectId(jobId)): Promise<void> {
+  async deleteJob(jobId: string): Promise<void> {
+    const projectId = this.snapshot.jobs.find(job => job.id === jobId)?.projectId ?? this.requireProject().id
+    const project = this.requireProject()
     await this.rpc<{ job: DirectorJob }>('jobs/delete', { projectId, jobId })
-    this.taskVersion += 1
-    this.patch({ taskProjects: this.snapshot.taskProjects.map(row => row.id === projectId
-      ? { ...row, jobs: row.jobs.filter(job => job.id !== jobId) } : row) })
-    const project = this.cachedProject(projectId)
-    if (project === undefined) return
+    this.patch({ jobs: this.snapshot.jobs.filter(job => job.id !== jobId) })
+    if (project.id !== projectId) return
     const jobs = project.jobs.filter(candidate => candidate.id !== jobId)
     const latest = jobs.at(-1)
     const status: VideoProject['status'] = jobs.some(candidate => candidate.status === 'queued' || candidate.status === 'running')
@@ -2387,6 +2172,155 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
     this.updateProject({ ...project, graph, jobs, status }, 'system')
   }
 
+  async importBatchFiles(nodeId: string, files: File[], directory = false): Promise<void> {
+    const project = this.requireProject()
+    const generation = this.projectGeneration
+    const node = project.graph.nodes.find(node => node.id === nodeId)
+    if (node?.data.kind !== 'batch-input') throw new Error('Choose a Batch Input node.')
+    if (node.data.frozen) throw new Error('Unfreeze Batch Input before replacing its cases.')
+    const candidates = files.map((file, index) => ({ id: String(index), name: file.name, relativePath: directory ? (file.webkitRelativePath || file.name).split('/').slice(1).join('/') || file.name : undefined }))
+    const matched = await matchBatchItems(candidates, { ...node.data.batch, source: 'files' })
+    if (matched.length > MAX_BATCH_CASES) throw new Error(`The filter matched more than ${MAX_BATCH_CASES} files. Narrow the regex.`)
+    const items: BatchItem[] = []
+    for (const candidate of matched) {
+      const file = files[Number(candidate.id)]
+      const relativePath = directory ? (file.webkitRelativePath || file.name).split('/').slice(1).join('/') || file.name : undefined
+      if (isTextFile(file)) {
+        if (file.size > 400_000) throw new Error(`${file.name}: text cases must be at most 100,000 characters.`)
+        const text = new TextDecoder('utf-8', { fatal: true }).decode(await file.arrayBuffer())
+        if (text.includes('\0') || text.length > 100_000) throw new Error(`${file.name}: choose a UTF-8 text file with at most 100,000 characters.`)
+        items.push({ id: crypto.randomUUID(), name: file.name, relativePath, text })
+      } else {
+        let kind: Exclude<MediaKind, 'text' | 'mask' | 'flow'>
+        try { kind = fileKind(file) } catch (error) { if (directory) continue; throw error }
+        const { asset } = await this.rpc<{ asset: AssetRef }>('assets/put', { projectId: project.id, kind,
+          name: file.name, mimeType: inferredMimeType(file, kind), dataBase64: base64(new Uint8Array(await file.arrayBuffer())) })
+        items.push({ id: crypto.randomUUID(), name: file.name, relativePath, asset })
+      }
+    }
+    if (this.snapshot.project?.id !== project.id || this.projectGeneration !== generation) throw new Error('The project changed while importing cases.')
+    if (!items.length) throw new Error('No supported text, image, audio or video files were found.')
+    const target = this.requireProject().graph.nodes.find(node => node.id === nodeId)
+    if (!target || target.data.frozen || !sameJson(target.data.batch, node.data.batch)) throw new Error('The Batch Input changed while files were being imported. Import again.')
+    this.updateNode(nodeId, { batch: { ...node.data.batch, source: 'files', items, sort: directory ? 'name' : 'input', startIndex: 1, endIndex: undefined } })
+  }
+
+  async loadBatchCases(runId: string): Promise<BatchCase[]> {
+    const projectId = this.snapshot.workflowRuns.find(run => run.id === runId)?.projectId ?? this.requireProject().id
+    // Batch Output can observe the provisional row before its RPC is persisted.
+    await this.hostSubmissions.get(runId)
+    const { cases } = await this.rpc<{ cases: BatchCase[] }>('batch-cases/list', { projectId, runId })
+    if (this.snapshot.project?.id === projectId) this.patch({ batchCases: { ...this.snapshot.batchCases, [runId]: cases } })
+    return cases
+  }
+
+  async runBatch(nodeId: string, resumeRunId?: string): Promise<string> {
+    if (this.snapshot.saving || this.snapshot.phase === 'loading') throw new Error('Wait for the current project operation.')
+    const project = this.requireProject()
+    const currentInput = project.graph.nodes.find(node => node.id === nodeId)
+    if (currentInput?.data.kind !== 'batch-input' || currentInput.data.frozen) throw new Error('Choose an unfrozen Batch Input node.')
+    if (this.snapshot.workflowRuns.some(run => run.projectId === project.id && run.kind === 'batch' && run.batchInputNodeId === nodeId && ['queued', 'running'].includes(run.status))) throw new Error('This Batch Input already has a queued or running batch.')
+    const generation = this.projectGeneration
+    const updateInput = (patch: Partial<DirectorNodeData>): void => this.updateSystemNode(nodeId, patch, project.id)
+    let source = structuredClone(project)
+    let rows: BatchCase[]
+    let summary: VdRun
+    if (resumeRunId) {
+      const { run } = await this.rpc<{ run: VdRun & { snapshot: Pick<VideoProject, 'name' | 'graph' | 'settings'> } }>('vd-runs/get', { projectId: project.id, runId: resumeRunId })
+      if (run.kind !== 'batch' || run.batchInputNodeId !== nodeId) throw new Error('This batch belongs to another input node.')
+      if (run.status === 'queued' || run.status === 'running') throw new Error('Cancel the unfinished batch before resuming it. It may still be scheduled in another window.')
+      source = { ...source, ...run.snapshot }
+      rows = await this.loadBatchCases(resumeRunId)
+      if (rows.some(row => row.status === 'running' || row.uncertain)) throw new Error('An interrupted case has an uncertain submission. Inspect its jobs before starting a new batch; it cannot be retried automatically.')
+      if (!rows.some(row => row.status !== 'completed')) throw new Error('All cases are already complete.')
+      // Cancel cleanup failures must be reconciled before any duplicate submission.
+      if (rows.some(row => row.jobs.some(job => job.errorCode === 'video-director/remote-cancel-failed' || ['orphaned', 'queued', 'running'].includes(job.status)))) throw new Error('Resolve the uncertain remote jobs before retrying this batch.')
+      const { snapshot: _snapshot, ...saved } = run
+      summary = { ...saved, status: 'queued', error: undefined, completedAt: undefined }
+    } else {
+      const input = source.graph.nodes.find(node => node.id === nodeId)!
+      const config: BatchInputConfig = input.data.batch ?? { source: 'text' }
+      const items = await matchBatchItems(batchSourceItems(config), config)
+      const { start, end } = batchRange(config, items.length)
+      const id = crypto.randomUUID()
+      const seedNodes = source.graph.nodes.filter(node => !node.data.frozen && ['image-generation', 'image-edit', 'video-generation', 'audio-generation'].includes(node.data.kind))
+      const bases = new Map(seedNodes.map(node => [node.id, { ...node.data, seed: node.data.seed ?? caseSeed({ ...node.data, seedControlAfterGenerate: 'fixed' }, 0) }]))
+      rows = items.slice(start - 1, end).map((input, offset) => ({ caseId: crypto.randomUUID(), batchRunId: id,
+        caseIndex: start + offset, input, status: 'pending', attempt: 0,
+        seeds: Object.fromEntries(seedNodes.map(node => [node.id, caseSeed(bases.get(node.id)!, offset)])), jobs: [], artifacts: [] }))
+      summary = { id, projectId: project.id, kind: 'batch', mode: 'all', batchSize: rows.length, nodeIds: [],
+        completedJobs: 0, totalJobs: 0, status: 'queued', startedAt: new Date().toISOString(),
+        batchInputNodeId: nodeId, startIndex: start, endIndex: end, completedCases: 0, failedCases: 0 }
+    }
+    if (this.snapshot.project?.id !== project.id || this.projectGeneration !== generation) throw new Error('The project changed while preparing the batch.')
+    const seedWritebackExpected = new Map(source.graph.nodes.map(node => [node.id, node.data.seed]))
+    if (resumeRunId) {
+      for (const node of source.graph.nodes) {
+        const last = rows.flatMap(row => row.jobs).filter(job => job.nodeId === node.id && job.status === 'completed').at(-1)
+        const seed = last?.seed ?? (last?.result && 'seed' in last.result ? last.result.seed : undefined)
+        if (seed === undefined) continue
+        const policy = node.data.seedControlAfterGenerate
+        const expected = policy === 'increment' ? seed + 1 : policy === 'decrement' ? seed - 1 : policy === 'randomize' ? seed : node.data.seed
+        const live = project.graph.nodes.find(live => live.id === node.id)
+        if (live?.data.seed === expected) seedWritebackExpected.set(node.id, expected)
+      }
+    }
+    const config = source.graph.nodes.find(node => node.id === nodeId)!.data.batch ?? { source: 'text' as const }
+    const other = source.graph.nodes.find(node => node.id !== nodeId && node.data.kind === 'batch-input' && !node.data.frozen)
+    if (other) throw new Error('Use one active Batch Input per workflow. Freeze other batch inputs to reuse their current payloads.')
+    const plan = planVdRun(source.graph, { mode: 'all' })
+    for (const id of plan.frozenNodeIds) {
+      const node = source.graph.nodes.find(node => node.id === id)!
+      const requiredOutput = node.data.kind !== 'preview' || source.graph.edges.some(edge => edge.source === id)
+      if (requiredOutput && !['save', 'batch-output'].includes(node.data.kind) && !isTriggerNodeKind(node.data.kind) && !hasReusableNodeOutput(node)) throw new Error(`Frozen node has no reusable result: ${node.data.title}. Unfreeze and run it first.`)
+    }
+    // Validate the range's media against every consuming port before submitting anything.
+    for (const row of rows) {
+      for (const edge of source.graph.edges.filter(edge => edge.source === nodeId)) {
+        const target = source.graph.nodes.find(node => node.id === edge.target)
+        if (target?.data.frozen) continue
+        const ports = resolveEdgePorts(source.graph, this.snapshot.nodeDefinitions, edge)
+        if (!ports.targetTypes.includes('flow') && !ports.targetTypes.includes(row.input.asset?.kind ?? 'text')) throw new Error(`Case ${row.caseIndex} (${row.input.name}) is incompatible with ${target?.data.title}.`)
+      }
+    }
+    summary.nodeIds = plan.nodeIds
+    summary.totalJobs = rows.length * plan.nodeIds.length
+    const submitted = { name: source.name, graph: source.graph, settings: source.settings }
+    const response = resumeRunId
+      ? await this.submitToHost(project.id, 'vd-runs/resume', { projectId: project.id, runId: resumeRunId }, [summary])
+      : await this.submitToHost(project.id, 'vd-runs/submit', { projectId: project.id, snapshot: submitted,
+          runIds: [summary.id], options: { mode: 'all', batchSize: 1 }, batch: { nodeId, rows } }, [summary])
+    const id = response.runs[0].id
+    response.runs.forEach(run => this.storeVdRun(run))
+    this.patch({ batchCases: { ...this.snapshot.batchCases, [id]: structuredClone(rows) } })
+    updateInput({ batchRunId: id, status: 'queued', error: undefined })
+    if (this.snapshot.project?.id === project.id) this.updateProject({ ...this.requireProject(),
+      graph: { ...this.requireProject().graph, nodes: this.requireProject().graph.nodes.map(node => node.data.kind === 'batch-output' && !node.data.frozen
+        ? { ...node, data: { ...node.data, batchRunId: id, batchCaseIndex: rows[0].caseIndex } } : node) } }, 'system-saveable')
+    try {
+      await this.observeHostRuns([id], config.errorPolicy === 'continue')
+      return id
+    } finally {
+      if (!this.disposed) {
+        rows = (await this.rpc<{ cases: BatchCase[] }>('batch-cases/list', { projectId: project.id, runId: id })).cases
+        this.patch({ batchCases: { ...this.snapshot.batchCases, [id]: rows } })
+      // Commit the next editable seed once, only if its captured settings still match.
+      for (const node of source.graph.nodes.filter(node => !node.data.frozen && this.snapshot.project?.id === project.id)) {
+        const completed = rows.flatMap(row => row.jobs).filter(job => job.nodeId === node.id && job.status === 'completed').at(-1)
+        const actualSeed = completed?.seed ?? (completed?.result && 'seed' in completed.result ? completed.result.seed : undefined)
+        const live = this.snapshot.project?.graph.nodes.find(candidate => candidate.id === node.id)
+        if (!completed || actualSeed === undefined || !live || live.data.frozen || live.data.seed !== seedWritebackExpected.get(node.id) || live.data.seedControlAfterGenerate !== node.data.seedControlAfterGenerate) continue
+        const policy = node.data.seedControlAfterGenerate
+        const next = policy === 'increment' ? actualSeed + 1 : policy === 'decrement' ? actualSeed - 1 : policy === 'randomize' ? actualSeed : undefined
+        if (next !== undefined && Number.isSafeInteger(next) && next >= 0) this.updateSystemNode(node.id, { seed: next })
+      }
+        const latest = this.snapshot.workflowRuns.find(run => run.id === id)
+        updateInput({ status: latest?.status === 'completed' ? 'completed' : latest?.status === 'cancelled' ? 'idle' : 'failed',
+          phase: latest?.status, progress: rows.filter(row => row.status === 'completed').length / rows.length, error: latest?.error })
+      }
+    }
+  }
+
   async runVdWorkflow(options: {
     mode: VdRunMode
     selectedNodeIds?: readonly string[]
@@ -2396,6 +2330,13 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
       throw new Error('Wait for the current project operation before running the vd-workflow.')
     }
     const project = this.requireProject()
+    const batchInput = project.graph.nodes.find(node => node.data.kind === 'batch-input' && !node.data.frozen
+      && (options.mode === 'all' || options.selectedNodeIds?.includes(node.id)))
+    if (batchInput) {
+      if ((options.batchSize ?? 1) !== 1) throw new Error('Use the Batch Input index range; Repeat Count must be 1 for a case batch.')
+      return this.runBatch(batchInput.id)
+    }
+
     let batchSize: number
     let executionSource: VideoProject
     let plan: ReturnType<typeof planVdRun>
@@ -2414,6 +2355,7 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
         .filter((node): node is DirectorNode => node !== undefined
           && node.data.kind !== 'preview'
           && node.data.kind !== 'save'
+          && node.data.kind !== 'batch-output'
           && !isTriggerNodeKind(node.data.kind)
           && !hasReusableNodeOutput(node))
       if (missingFrozenOutputs.length > 0) {
@@ -2433,170 +2375,56 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
       throw error
     }
 
-    const id = crypto.randomUUID()
-    const controller = new AbortController()
-    this.vdRunControllers.set(id, controller)
-    const startedAt = new Date().toISOString()
-    const summary: VdRun = {
-      id,
-      projectId: project.id,
-      mode: options.mode,
-      batchSize,
-      nodeIds: plan.nodeIds,
-      completedJobs: 0,
-      totalJobs: plan.nodeIds.length * batchSize,
-      status: 'queued',
-      startedAt,
-    }
-    this.storeVdRun(summary)
     const submitted = { name: executionSource.name, graph: executionSource.graph, settings: executionSource.settings }
-    this.vdRunSnapshots.set(id, structuredClone(submitted))
-    const previous = this.vdRunTails.get(project.id) ?? Promise.resolve()
-    let release!: () => void
-    const finished = new Promise<void>(resolve => { release = resolve })
-    const tail = previous.catch(() => {}).then(() => finished)
-    this.vdRunTails.set(project.id, tail)
-    const updateRun = async (patch: Partial<VdRun>): Promise<void> => {
-      Object.assign(summary, patch)
-      this.patchVdRun(id, patch)
-      await this.persistVdRun(summary)
-    }
+    const runIds = Array.from({ length: batchSize }, () => crypto.randomUUID())
+    const provisional: VdRun[] = runIds.map(id => ({ id, projectId: project.id, mode: options.mode, batchSize: 1,
+      nodeIds: plan.nodeIds, totalJobs: plan.nodeIds.length, completedJobs: 0, status: 'queued', startedAt: new Date().toISOString() }))
+    const { runs } = await this.submitToHost(project.id, 'vd-runs/submit', {
+      projectId: project.id, snapshot: submitted, runIds, options: { ...options, batchSize },
+    }, provisional)
+    runs.forEach(run => this.storeVdRun(run))
+    await this.observeHostRuns(runs.map(run => run.id))
+    return runs[0].id
+  }
 
-    let completedJobs = 0
-    let remoteCancellationFailed = false
-    try {
-      await this.persistVdRun(summary, submitted)
-      await waitForRunTurn(previous, controller.signal)
-      // A direct node job may have been started before this workflow was queued.
-      while (plan.nodeIds.some(nodeId => this.activeRuns.has(this.runKey(project.id, nodeId)) || this.activeTriggers.has(this.runKey(project.id, nodeId)))) {
-        await waitForRunTurn(new Promise<void>(resolve => setTimeout(resolve, 100)), controller.signal)
+  /** Observation only: closing/suspending this client never cancels or advances Host work. */
+  private async observeHostRuns(ids: string[], continueOnCaseError = false): Promise<void> {
+    while (!this.disposed) {
+      try { await this.refreshVdRuns() } catch {
+        await new Promise(resolve => setTimeout(resolve, JOB_POLL_MS))
+        continue
       }
-      controller.signal.throwIfAborted()
-      await updateRun({ status: 'running' })
-      for (let batchIndex = 0; batchIndex < batchSize; batchIndex += 1) {
-        if (controller.signal.aborted) throw new Error('vd-run was cancelled.')
-        this.resetRunStatuses(project.id)
-        let executionProject = { ...executionSource, graph: structuredClone(executionSource.graph) }
-        for (const stage of plan.stages) {
-          if (controller.signal.aborted) throw new Error('vd-run was cancelled.')
-          while (stage.some(nodeId => this.activeRuns.has(this.runKey(project.id, nodeId)) || this.activeTriggers.has(this.runKey(project.id, nodeId)))) {
-            await waitForRunTurn(new Promise<void>(resolve => setTimeout(resolve, 100)), controller.signal)
-          }
-          const outcomes = await Promise.allSettled(stage.map(async nodeId => {
-            const node = executionProject.graph.nodes.find(candidate => candidate.id === nodeId)
-            if (node === undefined) throw new Error(`Node ${nodeId} disappeared from the run snapshot.`)
-            if (isTriggerNodeKind(node.data.kind)) {
-              await this.submitTriggerRun(nodeId, {
-                projectId: project.id,
-              graph: executionProject.graph,
-                workflowRunId: id,
-                workflowRunMode: options.mode,
-                batchIndex,
-                batchSize,
-                signal: controller.signal,
-              })
-              return { nodeId }
-            }
-            const configuredSeed = node.data.seed
-            const seed = Number.isSafeInteger(configuredSeed)
-              ? ((configuredSeed! + batchIndex) % 2_147_483_648)
-              : undefined
-            const activeRun = await this.submitNodeRun(nodeId, {
-              projectId: project.id,
-              graph: executionProject.graph,
-              sourceRevision: executionSource.revision,
-              workflowRunId: id,
-              workflowRunMode: options.mode,
-              batchIndex,
-              batchSize,
-              seed,
-              awaitCompletion: true,
-              signal: controller.signal,
-            })
-            const job = await activeRun.completion!.promise
-            return { nodeId, job }
-          }))
-
-          const failures: string[] = []
-          for (const outcome of outcomes) {
-            completedJobs += 1
-            if (outcome.status === 'rejected') {
-              if (outcome.reason?.code === 'video-director/cancel-request-failed') remoteCancellationFailed = true
-              failures.push(errorMessage(outcome.reason))
-              continue
-            }
-            const { nodeId, job } = outcome.value
-            if (job === undefined) continue
-            if (job.errorCode === 'video-director/remote-cancel-failed') remoteCancellationFailed = true
-            if (job.status !== 'completed' || job.result === undefined) {
-              failures.push(job.error ?? `${job.status}: ${job.phase}`)
-              continue
-            }
-            executionProject = this.projectWithJobResult(executionProject, nodeId, job.result, 'execution')
-          }
-          await updateRun({ completedJobs })
-          if (failures.length > 0) throw new Error(failures.join(' '))
-        }
+      const runs = ids.map(id => this.snapshot.workflowRuns.find(run => run.id === id))
+      if (runs.every(run => run && !['queued', 'running'].includes(run.status))) {
+        const failed = runs.find(run => run?.status === 'failed' || run?.status === 'cancelled')
+        if (failed && !(continueOnCaseError && failed.error?.includes('case(s) failed.'))) throw new Error(failed.error ?? 'vd-run was cancelled.')
+        return
       }
-      controller.signal.throwIfAborted()
-      await updateRun({
-        completedJobs,
-        status: 'completed',
-        completedAt: new Date().toISOString(),
-      })
-      return id
-    } catch (error) {
-      const cancelled = controller.signal.aborted && !remoteCancellationFailed
-      const message = cancelled ? 'vd-run was cancelled.' : errorMessage(error)
-      await updateRun({
-        completedJobs,
-        status: cancelled ? 'cancelled' : 'failed',
-        completedAt: new Date().toISOString(),
-        error: message,
-      })
-      if (!cancelled && this.snapshot.project?.id === project.id) this.patch({ error: message })
-      throw error
-    } finally {
-      this.vdRunControllers.delete(id)
-      this.vdRunWrites.delete(id)
-      this.vdRunSnapshots.delete(id)
-      release()
-      if (this.vdRunTails.get(project.id) === tail) this.vdRunTails.delete(project.id)
+      await new Promise(resolve => setTimeout(resolve, 250))
     }
   }
 
-  async cancelVdRun(workflowRunId: string, projectId = this.runProjectId(workflowRunId)): Promise<void> {
-    this.vdRunControllers.get(workflowRunId)?.abort('Cancelled by the Video Director user')
-    const project = this.cachedProject(projectId)
-    const jobs = project?.jobs ?? this.snapshot.taskProjects.find(row => row.id === projectId)?.jobs ?? []
-    const jobIds = new Set([...this.activeRuns.values()]
-      .filter(run => run.workflowRunId === workflowRunId && run.jobId !== undefined)
-      .map(run => run.jobId!))
-    // Restored jobs may no longer have a node on the current canvas.
-    for (const job of jobs) {
-      if (job.workflowRunId === workflowRunId && (job.status === 'running' || job.status === 'queued')) jobIds.add(job.id)
-    }
-    const outcomes = await Promise.allSettled([...jobIds].map(jobId => this.cancelJob(jobId, projectId)))
-    const errors = outcomes.flatMap(outcome => outcome.status === 'rejected' ? [errorMessage(outcome.reason)] : [])
-    if (errors.length > 0) throw new Error(`Could not request cancellation for every job: ${errors.join(' ')}`)
-    const saved = this.snapshot.workflowRuns.find(run => run.id === workflowRunId)
-    if (saved !== undefined && !this.vdRunControllers.has(workflowRunId)
-      && (saved.status === 'queued' || saved.status === 'running')) {
-      const stopped = await Promise.all([...jobIds].map(async jobId => {
-        while (true) {
-          const { job } = await this.rpc<{ job: DirectorJob }>('jobs/get', { projectId, jobId })
-          this.updateVisibleJob(job)
-          if (job.status !== 'running' && job.status !== 'queued') return job
-          await new Promise(resolve => setTimeout(resolve, JOB_POLL_MS))
-        }
-      }))
-      const failure = stopped.find(job => job.errorCode === 'video-director/remote-cancel-failed')
-      const cancelled: VdRun = { ...saved, status: failure ? 'failed' : 'cancelled',
-        error: failure?.error, completedAt: new Date().toISOString() }
-      this.patchVdRun(workflowRunId, cancelled)
-      await this.persistVdRun(cancelled)
-      if (failure) throw new Error(failure.error ?? 'Remote cancellation failed.')
-    }
+  async cancelVdRun(workflowRunId: string): Promise<void> {
+    const run = this.snapshot.workflowRuns.find(run => run.id === workflowRunId)
+    const projectId = run?.projectId ?? this.snapshot.jobs.find(job => job.workflowRunId === workflowRunId)?.projectId ?? this.requireProject().id
+    await this.hostSubmissions.get(workflowRunId)
+    const latest = await this.rpc<{ run: VdRun }>('vd-runs/get', { projectId, runId: workflowRunId }).catch(() => null)
+    if (latest) this.storeVdRun(latest.run)
+    await this.rpc('vd-runs/cancel', { projectId, runId: workflowRunId })
+    await this.refreshVdRuns()
+  }
+
+  async deleteVdRun(runId: string): Promise<void> {
+    const run = this.snapshot.workflowRuns.find(run => run.id === runId)
+    if (!run) throw new Error('Workflow run was not found.')
+    await this.rpc('vd-runs/delete', { projectId: run.projectId, runId })
+    await this.refreshVdRuns()
+  }
+
+  async getVdRunJobs(runId: string): Promise<DirectorJob[]> {
+    const run = this.snapshot.workflowRuns.find(run => run.id === runId)
+    if (!run) throw new Error('Workflow run was not found.')
+    return (await this.rpc<{ jobs: DirectorJob[] }>('vd-runs/jobs', { projectId: run.projectId, runId })).jobs
   }
 
   /** @deprecated Use runVdWorkflow; this executes the canvas graph, not a ComfyUI graph. */
@@ -2848,6 +2676,7 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
   private async installProjectArchive(
     nameOrResolver: string | ((archive: ProjectArchive) => string),
     archiveLoader: () => Promise<ProjectArchive>,
+    linkedAssets: AssetRef[] = [],
   ): Promise<void> {
     if (this.snapshot.phase === 'loading') {
       throw new Error('Wait for the current project transition to finish before importing a project.')
@@ -2870,9 +2699,17 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
       createdProjectId = created.id
 
       const restoredAssets = new Map<string, AssetRef>()
+      for (const asset of linkedAssets) {
+        const restored = await this.rpc<{ asset: AssetRef }>('assets/link', { projectId: created.id, sourceId: asset.id })
+        restoredAssets.set(asset.id, restored.asset)
+      }
       for (const asset of archive.assets) {
+        const generated = archive.project.graph.nodes.some(node => !node.data.kind.startsWith('load-')
+          && node.data.kind !== 'preview' && node.data.kind !== 'save'
+          && collectAssetRefs([node.data.asset, node.data.assets, node.data.result]).has(asset.sourceId))
         const restored = (await this.rpc<{ asset: AssetRef }>('assets/put', {
           projectId: created.id,
+          origin: asset.origin ?? (generated ? 'output' : 'input'),
           kind: asset.kind,
           name: asset.name,
           mimeType: asset.mimeType,
@@ -2881,7 +2718,8 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
         restoredAssets.set(asset.sourceId, restored)
       }
       const graph = rewriteArchiveAssets(archive.project.graph, restoredAssets) as DirectorGraph
-      const draft = { name, graph, settings: structuredClone(archive.project.settings) }
+      const draft = { name, graph, settings: structuredClone(archive.project.settings),
+        ...(archive.project.mediaLibrary === undefined ? {} : { mediaLibrary: rewriteArchiveAssets(archive.project.mediaLibrary, restoredAssets) as AssetRef[] }) }
       await this.rpc('projects/draft', {
         projectId: created.id,
         draft,
@@ -2929,7 +2767,6 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
 
   private async loadProject(projectId: string, openSession: boolean): Promise<void> {
     const transition = ++this.transitionVersion
-    const cachedAtRequest = this.projectCache.get(projectId)
     this.patch({ phase: 'loading', error: null, conflict: false })
     try {
       const response = await this.rpc<{ project: VideoProject }>('projects/get', { projectId })
@@ -2964,30 +2801,31 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
       const draft = recovered === undefined ? persistedProject.draft : recovered.draft
       const { draft: _draft, ...savedProject } = persistedProject
       const saved = normalizeLoadedPromptValidation(this.restoreCompletedJobResults(savedProject))
-      const cached = this.projectCache.get(projectId)
-      const useCached = cached !== undefined && (this.hasProjectWork(projectId) || cached !== cachedAtRequest)
-      const project = useCached ? { ...cached.project, revision: persistedProject.revision }
-        : draft == null ? saved : normalizeLoadedPromptValidation(this.restoreCompletedJobResults({ ...savedProject, ...draft }))
+      const project = draft == null ? saved : normalizeLoadedPromptValidation(this.restoreCompletedJobResults({ ...savedProject, ...draft }))
       this.baseProject = structuredClone(persistedProject)
-      this.savedState = useCached ? cached.savedState : this.historyState(saved)
+      this.savedState = this.historyState(saved)
       this.resetHistory()
       this.editVersion = 0
       this.projectGeneration += 1
       if (sessionReady && (openSession || this.ctx.sessions.list.getSnapshot().current !== project.sessionId)) {
         this.ctx.sessions.open(project.sessionId)
       }
-      this.patch({ project, phase: 'ready', dirty: useCached ? cached.dirty : project.hasSavedVersion === false || draft != null, saving: false, conflict: false, error: sessionError })
+      this.patch({ project, phase: 'ready', dirty: project.hasSavedVersion === false || draft != null, saving: false, conflict: false, error: sessionError })
       if (recovered !== undefined) void this.drafts.flush(projectId).catch(error => this.patch({ error: errorMessage(error) }))
+      if (project.graph.nodes.some(node => node.data.kind === 'batch-input' || node.data.kind === 'batch-output')) await this.refreshVdRuns()
+      else void this.refreshVdRuns().catch(() => {})
       for (const job of project.jobs) {
-        if ((job.status !== 'queued' && job.status !== 'running') || !project.graph.nodes.some(node => node.id === job.nodeId)
-          || this.activeRuns.has(this.runKey(project.id, job.nodeId))) continue
+        if ((job.status !== 'queued' && job.status !== 'running') || !project.graph.nodes.some(node => node.id === job.nodeId)) continue
+        if (this.activeRuns.has(this.runKey(job.nodeId, project.id))) continue
         const activeRun: ActiveNodeRun = {
           projectId: project.id,
+          projectGeneration: this.projectGeneration,
           clientRunId: job.clientRunId ?? job.id,
           jobId: job.id,
           workflowRunId: job.workflowRunId,
+          suppressSeedUpdate: job.batchRunId !== undefined,
         }
-        this.activeRuns.set(this.runKey(project.id, job.nodeId), activeRun)
+        this.activeRuns.set(this.runKey(job.nodeId), activeRun)
         this.updateSystemNode(job.nodeId, {
           jobId: job.id,
           status: job.status,
@@ -3005,21 +2843,9 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
   }
 
   private updateProject(project: VideoProject, origin: ProjectUpdateOrigin = 'user'): void {
+    if (this.snapshot.phase === 'loading') return
     const current = this.snapshot.project
-    if (current?.id !== project.id) {
-      const cached = this.projectCache.get(project.id)
-      if (!cached || sameJson(cached.project, project)) return
-      const dirty = cached.dirty || origin === 'system-saveable'
-      this.projectCache.set(project.id, { ...cached, project, dirty,
-        savedState: origin === 'system' && !dirty ? this.historyState(project) : cached.savedState })
-      if (dirty) this.drafts.stage(project.id, this.historyState(project))
-      this.patch({ projects: this.snapshot.projects.map(row => row.id === project.id
-        ? { ...row, name: project.name, status: project.status, nodeCount: project.graph.nodes.length, unsaved: dirty } : row),
-        taskProjects: this.withTaskProject(project) })
-      return
-    }
-    if (this.snapshot.phase === 'loading' && origin !== 'system' && origin !== 'system-saveable') return
-    if (sameJson(project, current)) return
+    if (current !== null && sameJson(project, current)) return
     if (origin === 'user' && current !== null && this.historyTransaction === null) {
       this.pushBounded(this.undoStack, this.historyState(current))
       this.redoStack.length = 0
@@ -3106,6 +2932,7 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
           name: local.name,
           graph: local.graph,
           settings: local.settings,
+          mediaLibrary: local.mediaLibrary ?? [],
         }
       }
     }
@@ -3149,12 +2976,12 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
 
   private isActiveRun(nodeId: string, activeRun: ActiveNodeRun, jobId?: string): boolean {
     if (this.disposed) return false
-    if (this.activeRuns.get(this.runKey(activeRun.projectId, nodeId)) !== activeRun) return false
+    if (this.activeRuns.get(this.runKey(nodeId, activeRun.projectId)) !== activeRun) return false
     if (jobId !== undefined && activeRun.jobId !== jobId) return false
-    return activeRun.workflowRunId !== undefined || this.cachedProject(activeRun.projectId)?.graph.nodes.some(node => node.id === nodeId) === true
+    return true
   }
 
-  private scheduleJobPoll(jobId: string, nodeId: string, delay = JOB_POLL_MS, activeRun = this.activeRuns.get(this.runKey(this.requireProject().id, nodeId))): void {
+  private scheduleJobPoll(jobId: string, nodeId: string, delay = JOB_POLL_MS, activeRun = this.activeRuns.get(this.runKey(nodeId))): void {
     if (activeRun === undefined || !this.isActiveRun(nodeId, activeRun, jobId)) return
     const prior = this.jobTimers.get(jobId)
     if (prior !== undefined) clearTimeout(prior)
@@ -3166,54 +2993,54 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
   }
 
   private async pollJob(jobId: string, nodeId: string, activeRun: ActiveNodeRun): Promise<void> {
-    const project = this.cachedProject(activeRun.projectId)
-    if (project == null || !this.isActiveRun(nodeId, activeRun, jobId)) return
+    if (!this.isActiveRun(nodeId, activeRun, jobId)) return
+    const updateNode = (patch: Partial<DirectorNodeData>): void => this.updateSystemNode(nodeId, patch, activeRun.projectId)
     try {
-      const { job } = await this.rpc<{ job: DirectorJob }>('jobs/get', { projectId: project.id, jobId })
+      const { job } = await this.rpc<{ job: DirectorJob }>('jobs/get', { projectId: activeRun.projectId, jobId })
       if (!this.isActiveRun(nodeId, activeRun, jobId)) return
       activeRun.consecutivePollFailures = 0
       this.updateVisibleJob(job)
       if (job.status === 'queued' || job.status === 'running') {
-        this.updateSystemNode(nodeId, { status: job.status, phase: job.phase, progress: job.progress, error: undefined, jobId,
-          runStartedAt: job.startedAt, runCompletedAt: undefined }, activeRun.projectId)
+        updateNode({ status: job.status, phase: job.phase, progress: job.progress, error: undefined, jobId,
+          runStartedAt: job.startedAt, runCompletedAt: undefined })
         this.scheduleJobPoll(jobId, nodeId, JOB_POLL_MS, activeRun)
         return
       }
       if (job.status === 'completed' && job.result !== undefined) {
         this.applyJobResult(nodeId, job.result, activeRun)
       } else {
-        this.updateSystemNode(nodeId, { status: 'failed', phase: job.phase, error: job.error ?? job.status, progress: job.progress }, activeRun.projectId)
+        updateNode({ status: 'failed', phase: job.phase, error: job.error ?? job.status, progress: job.progress })
       }
-      if (this.activeRuns.get(this.runKey(activeRun.projectId, nodeId)) === activeRun) this.activeRuns.delete(this.runKey(activeRun.projectId, nodeId))
+      if (this.activeRuns.get(this.runKey(nodeId, activeRun.projectId)) === activeRun) this.activeRuns.delete(this.runKey(nodeId, activeRun.projectId))
       activeRun.completion?.resolve(job)
     } catch (error) {
       if (!this.isActiveRun(nodeId, activeRun, jobId)) return
       if (!isPermanentJobPollError(error)) {
         const failures = (activeRun.consecutivePollFailures ?? 0) + 1
         activeRun.consecutivePollFailures = failures
-        const currentProject = this.cachedProject(activeRun.projectId)
+        const currentProject = this.snapshot.project
         const currentJob = currentProject?.jobs.find(candidate => candidate.id === jobId)
         if (currentJob !== undefined) this.updateVisibleJob({ ...currentJob, phase: 'reconnecting' })
-        const currentNode = this.cachedProject(activeRun.projectId)?.graph.nodes.find(node => node.id === nodeId)
-        this.updateSystemNode(nodeId, {
+        const currentNode = this.snapshot.project?.graph.nodes.find(node => node.id === nodeId)
+        updateNode({
           status: currentNode?.data.status === 'queued' ? 'queued' : 'running',
           phase: 'reconnecting',
           error: undefined,
           jobId,
-        }, activeRun.projectId)
+        })
         this.scheduleJobPoll(jobId, nodeId, jobPollRetryDelay(failures), activeRun)
         return
       }
-      this.updateSystemNode(nodeId, { status: 'failed', error: errorMessage(error) }, activeRun.projectId)
-      this.activeRuns.delete(this.runKey(activeRun.projectId, nodeId))
+      updateNode({ status: 'failed', error: errorMessage(error) })
+      this.activeRuns.delete(this.runKey(nodeId, activeRun.projectId))
       activeRun.completion?.reject(error instanceof Error ? error : new Error(String(error)))
     }
   }
 
   private applyJobResult(nodeId: string, result: VdNodeResult, activeRun?: ActiveNodeRun): void {
-    if (activeRun !== undefined && !this.isActiveRun(nodeId, activeRun, activeRun.jobId)) return
-    const project = this.requireRunProject(activeRun?.projectId ?? this.requireProject().id)
-    const updated = this.projectWithJobResult(project, nodeId, result, 'live', activeRun)
+    if (activeRun !== undefined && (this.snapshot.project?.id !== activeRun.projectId || !this.isActiveRun(nodeId, activeRun, activeRun.jobId))) return
+    const project = this.requireProject()
+    const updated = this.projectWithJobResult(project, nodeId, result, true, activeRun)
     if (updated === project) return
     // A terminal result is not a user Undo step, but the materialized output and
     // auto-created Preview are explicit-save canvas changes.
@@ -3226,8 +3053,9 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
       if (job.projectId === project.id) latestJobIds.set(job.nodeId, job.id)
     }
     return project.jobs.reduce((current, job) => {
-      if (latestJobIds.get(job.nodeId) !== job.id || job.status !== 'completed' || job.result === undefined) return current
-      return this.projectWithJobResult(current, job.nodeId, job.result, 'restore')
+      if (job.batchRunId !== undefined || latestJobIds.get(job.nodeId) !== job.id || job.status !== 'completed' || job.result === undefined) return current
+      if (current.graph.nodes.find(node => node.id === job.nodeId)?.data.mediaEditedFromJobId === job.id) return current
+      return this.projectWithJobResult(current, job.nodeId, job.result, false)
     }, project)
   }
 
@@ -3235,7 +3063,7 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
     project: VideoProject,
     nodeId: string,
     result: VdNodeResult,
-    mode: 'live' | 'execution' | 'restore',
+    createPreview: boolean,
     activeRun?: ActiveNodeRun,
   ): VideoProject {
     const source = project.graph.nodes.find(node => node.id === nodeId)
@@ -3248,7 +3076,7 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
       ? source.data.seed === completedSeed
       : source.data.seed === submittedSeedState.seed
         && source.data.seedControlAfterGenerate === submittedSeedState.control
-    const controlledSeed = completedSeed === undefined || !seedStateUnchanged
+    const controlledSeed = activeRun?.suppressSeedUpdate === true || completedSeed === undefined || !seedStateUnchanged
       ? undefined
       : seedControl === 'randomize' && submittedSeedState !== undefined
         ? completedSeed
@@ -3261,6 +3089,7 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
       ? [...project.jobs].reverse().find(candidate => candidate.nodeId === nodeId && candidate.status === 'completed')
       : project.jobs.find(candidate => candidate.id === activeRun.jobId)
     const sourcePatch: Partial<DirectorNodeData> = {
+      mediaEditId: undefined, mediaEditedFromJobId: undefined,
       status: 'completed', progress: 1, phase: 'completed', result, ...payload,
       runStartedAt: completedJob?.startedAt ?? completedJob?.createdAt ?? source.data.runStartedAt,
       runCompletedAt: completedJob?.completedAt ?? source.data.runCompletedAt,
@@ -3271,30 +3100,14 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
       ? { ...node, data: { ...node.data, ...sourcePatch } }
       : node)
     let edges = [...project.graph.edges]
-    // Clear Previews suppresses replay of old results. A newly completed job
-    // must reopen the same output paths in both the editor and run snapshot.
-    // Stop at executable/frozen nodes so their retained outputs stay intact.
-    if (mode !== 'restore') {
-      const resumed = new Set<string>()
-      const pending = [source.id]
-      while (pending.length > 0) {
-        const parentId = pending.pop()!
-        for (const node of nodes) {
-          if (resumed.has(node.id) || node.data.frozen === true
-            || (node.data.kind !== 'preview' && node.data.kind !== 'save')) continue
-          if (node.data.derivedFrom !== parentId && !edges.some(edge => edge.source === parentId && edge.target === node.id)) continue
-          resumed.add(node.id)
-          pending.push(node.id)
-        }
-      }
-      nodes = nodes.map(node => resumed.has(node.id)
-        ? { ...node, data: resumedPreviewData(node.data) } : node)
+    if (createPreview) {
+      nodes = resumeSinkPaths(nodes, edges, source.id)
     }
     const existingPreview = nodes.find(node => (
-      node.data.kind === 'preview'
+      (node.data.kind === 'preview' || node.data.kind === 'batch-output')
       && (node.data.derivedFrom === source.id || edges.some(edge => edge.source === source.id && edge.target === node.id))
     ))
-    if (mode === 'live' && existingPreview === undefined) {
+    if (createPreview && existingPreview === undefined) {
       const previewId = crypto.randomUUID()
       const definition = this.snapshot.nodeDefinitions.find(candidate => candidate.type === 'core.preview')
       const preview: DirectorNode = {
@@ -3368,6 +3181,7 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
       name: project.name,
       graph: project.graph,
       settings: project.settings,
+      mediaLibrary: project.mediaLibrary ?? [],
     })
   }
 
@@ -3394,6 +3208,7 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
     const nodes = state.graph.nodes.map(node => {
       const live = currentNodes.get(node.id)
       if (live === undefined) return node
+      if (live.data.mediaEditId !== node.data.mediaEditId) return node
       const data = { ...node.data }
       for (const key of runtimeKeys) {
         if (key in live.data) data[key] = live.data[key]
@@ -3414,6 +3229,7 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
       name: state.name,
       graph: { ...structuredClone(state.graph), nodes },
       settings: structuredClone(state.settings),
+      ...((state.mediaLibrary !== undefined || current.mediaLibrary !== undefined) ? { mediaLibrary: structuredClone(state.mediaLibrary ?? []) } : {}),
     }
     this.editVersion += 1
     this.patch({ project, dirty: this.isDirty(project), conflict: false, error: null })
@@ -3443,8 +3259,6 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
 
   private patch(patch: Partial<DirectorSnapshot>): void {
     const previous = this.snapshot
-    if ((patch.project !== undefined && patch.project !== previous.project)
-      || (patch.projects !== undefined && patch.projects !== previous.projects)) this.taskVersion += 1
     this.snapshot = {
       ...this.snapshot,
       ...patch,
@@ -3453,12 +3267,10 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
     }
     const project = this.snapshot.project
     if (project !== null) {
-      this.projectCache.set(project.id, { project, dirty: this.snapshot.dirty, savedState: this.savedState })
-      if (previous.project !== project) this.snapshot.taskProjects = this.withTaskProject(project)
       this.snapshot.projects = this.snapshot.projects.map(row => row.id === project.id
         ? { ...row, name: project.name, nodeCount: project.graph.nodes.length, unsaved: this.snapshot.dirty,
             hasSavedVersion: project.hasSavedVersion !== false } : row)
-      if (previous.project?.id === project.id
+      if (this.snapshot.phase === 'ready' && previous.project?.id === project.id
         && (previous.project !== project || previous.dirty !== this.snapshot.dirty)
         && (this.snapshot.dirty || previous.dirty)) {
         this.drafts.stage(project.id, this.snapshot.dirty ? this.historyState(project) : null)
@@ -3472,4 +3284,5 @@ export class DirectorController implements ObservableSource<DirectorSnapshot> {
     if (result.ok) return result.value
     throw remoteError(result.error)
   }
+
 }

@@ -6,6 +6,16 @@ const root = fileURLToPath(new URL('../', import.meta.url))
 await mkdir(`${root}dist`, { recursive: true })
 await build({
   absWorkingDir: root,
+  entryPoints: ['src/client/host-execution.ts'],
+  outfile: 'dist/workflow-execution.js',
+  bundle: true,
+  format: 'esm',
+  platform: 'node',
+  target: ['node22'],
+  legalComments: 'none',
+})
+await build({
+  absWorkingDir: root,
   entryPoints: ['src/client/index.tsx'],
   outfile: 'dist/client.js',
   bundle: true,

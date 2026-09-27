@@ -49,6 +49,8 @@ test('standalone HTTP host persists Codex defaults, explicit overrides, and secr
 
 test('HTTP host blocks foreign origins/hosts and serves project asset ranges', async t => {
   const { url, rpc } = await host(t)
+  const page = await fetch(url)
+  assert.match(page.headers.get('Content-Security-Policy'), /worker-src 'self' blob:/u)
   assert.equal((await fetch(`${url}/health`)).status, 200)
   assert.equal((await fetch(`${url}/health`, { headers: { Origin: 'https://unrelated.example' } })).status, 403)
   const foreignHostStatus = await new Promise((resolve, reject) => {
@@ -91,6 +93,8 @@ test('local provider integration executes text and imports an image through the 
   assert.equal(text.text, 'Generated test text')
   const result = await app.providers.run({ operation: 'image-generation', providerId: project.settings.defaultImageProvider, prompt: 'Test image', projectId: project.id }, signal)
   assert.equal(result.assets.length, 1)
+  assert.equal(app.store.asset(result.assets[0].id).origin, 'output')
+  assert.match(app.store.asset(result.assets[0].id).filename, /^outputs\//u)
   assert.equal(await (await fetch(new URL(result.assets[0].url, url))).text(), 'test generated image')
   assert.deepEqual(selected.map(options => options.model), ['gpt-5.6-sol', 'gpt-5.6-sol'])
   assert.deepEqual(selected.map(options => options.sandboxMode), ['read-only', 'workspace-write'])

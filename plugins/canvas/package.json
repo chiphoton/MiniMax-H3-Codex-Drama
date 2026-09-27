@@ -1,6 +1,6 @@
 {
   "name": "codex-drama-canvas",
-  "version": "0.2.0",
+  "version": "0.4.0",
   "private": true,
   "description": "Local workflow canvas and Codex Plan adviser for Codex Drama",
   "type": "module",

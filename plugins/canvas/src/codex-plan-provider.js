@@ -207,6 +207,7 @@ export class CodexPlanImageRuntime {
       await progress({ phase: 'saving-codex-image', progress: 0.95 })
       const extension = EXTENSION_BY_IMAGE_MIME.get(output.mimeType) ?? 'png'
       const asset = await this.store.putAsset({
+        origin: 'output',
         projectId: input.projectId,
         kind: 'image',
         name: `codex-plan-${Date.now()}.${extension}`,

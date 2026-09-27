@@ -1,7 +1,7 @@
 {
   "name": "canvas",
-  "version": "0.2.0",
-  "description": "A local web workflow canvas with a media gallery, recoverable project drafts, Codex Plan text/image defaults, and an environment and usage adviser.",
+  "version": "0.4.0",
+  "description": "A local web workflow canvas with a persistent run queue, batch processing, media editing, project folders, and Codex Plan text/image defaults.",
   "author": {
     "name": "chiphoton",
     "url": "https://github.com/chiphoton"
@@ -20,7 +20,7 @@
   "interface": {
     "displayName": "Canvas",
     "shortDescription": "Visual workflows with Codex Plan text and images",
-    "longDescription": "Run a local infinite canvas for video-production workflows, use Codex Plan for text and image generation, and get AI guidance for installation, provider setup, and canvas operation.",
+    "longDescription": "Run video-production workflows and batches on a persistent local queue, organize projects and media, trim and crop outputs, and use Codex Plan for text, images, and workflow advice.",
     "developerName": "chiphoton",
     "category": "Creativity",
     "capabilities": [

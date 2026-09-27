@@ -1,3 +1,6 @@
+export { JobDrawer } from './JobDrawer'
+import { batchFrozenWarnings } from './batch'
+import { INPUT_FILE_ACCEPTS, inputFileKind, type InputFileKind } from './input-files'
 import { t, useLanguage } from './i18n'
 import {
   Background,
@@ -41,6 +44,9 @@ import { CanvasContextMenu, CanvasModeControl, isCanvasTextInput, scrollableCanv
 import { CloseIcon, GalleryIcon, JobsIcon, PlayIcon, RedoIcon, SaveIcon, SettingsIcon, UndoIcon } from './icons'
 import { JobDrawer } from './JobDrawer'
 import { ArtifactGallery } from './ArtifactGallery'
+import { AssetPicker, type InputAssetKind } from './AssetPicker'
+import { MediaEditingContext } from './media-editing'
+import { MediaEditorIcon } from './MediaEditor'
 import {
   fieldInputModeEnabled,
   fieldInputPortId,
@@ -214,7 +220,7 @@ function TopBar({
   }
   const selectProject = async (projectId: string): Promise<void> => {
     if (projectId === project?.id || snapshot.saving || projectTransitioning) return
-    try { await director.selectProject(projectId) } catch (error) { swallow(error) }
+    try { await director.selectProject(projectId) } catch (error) { window.alert(error instanceof Error ? error.message : String(error)) }
   }
   const applyRename = async (): Promise<void> => {
     if (renameDraft.trim() === '' || renameProjectId === null) return
@@ -262,19 +268,19 @@ function TopBar({
     try { await director.importProject(await file.text()) } catch (error) { swallow(error) }
   }
   const workflowBusy = snapshot.workflowRuns.some(run => run.projectId === project?.id && run.status === 'running')
-  const runnableCount = project?.graph.nodes.filter(node => REMOTE_NODE_KINDS.has(node.data.kind)).length ?? 0
+  const runnableCount = project?.graph.nodes.filter(node => REMOTE_NODE_KINDS.has(node.data.kind) || node.data.kind === 'batch-input').length ?? 0
+  const hasBatchInput = project?.graph.nodes.some(node => node.data.kind === 'batch-input' && !node.data.frozen) ?? false
   const canRunWorkflow = project !== null && runnableCount > 0 && !snapshot.saving && !projectTransitioning
   const currentProjectBusy = workflowBusy || (project?.jobs.some(job => job.status === 'queued' || job.status === 'running') ?? false)
     || snapshot.workflowRuns.some(run => run.projectId === project?.id && run.status === 'queued')
-  const activeJobCount = snapshot.taskProjects.reduce((count, row) => count
-    + row.jobs.filter(job => job.status === 'queued' || job.status === 'running').length, 0)
+  const activeJobCount = snapshot.jobs.filter(job => job.status === 'queued' || job.status === 'running').length
     + snapshot.workflowRuns.filter(run => run.status === 'queued').length
   const runVdWorkflow = (mode: 'all' | 'selected' | 'from-selection'): void => {
     setRunMenuOpen(false)
     void director.runVdWorkflow({
       mode,
       selectedNodeIds: mode === 'all' ? undefined : [...selectedNodeIds],
-      batchSize,
+      batchSize: hasBatchInput ? 1 : batchSize,
     }).catch(swallow)
   }
   return (
@@ -298,10 +304,12 @@ function TopBar({
         <ProjectPicker
           snapshot={snapshot}
           disabled={snapshot.saving || projectTransitioning}
-          onRefresh={() => { setMenuOpen(false); setCreating(false); void director.refreshExamples() }}
+          onRefresh={() => { setMenuOpen(false); setCreating(false); void director.refreshExamples(); void director.refreshProjectFolders().catch(swallow) }}
           onSelectProject={selectProject}
           onProjectAction={(id, action) => { void projectAction(action, id) }}
           onReorder={ids => { void director.reorderProjects(ids).catch(swallow) }}
+          onOrganize={change => director.organizeProjects(change)}
+          onCreateWorkflow={(name, parentId, expectedRevision) => director.createProject(name, { parentId, expectedRevision })}
           onSelectExample={async id => { try { await director.openExample(id) } catch (error) { swallow(error) } }}
         />
         <button type="button" className="vd-icon-button" title={snapshot.saving || projectTransitioning ? t("请等待当前操作完成") : t("新建工程")} disabled={snapshot.saving || projectTransitioning} onClick={() => setCreating(value => !value)}>＋</button>
@@ -388,7 +396,7 @@ function TopBar({
           </button>
           {runMenuOpen ? (
             <div className="vd-run-menu" role="menu" aria-label={t("运行工作流")}>
-              <label className="vd-batch-control">
+              {hasBatchInput ? <p>{t('Case range is configured on Batch Input.')}</p> : <label className="vd-batch-control">
                 <span>{t("批次数")}</span>
                 <input
                   type="number"
@@ -399,7 +407,7 @@ function TopBar({
                   onChange={event => setBatchSize(Math.max(1, Math.min(20, Number(event.target.value) || 1)))}
                 />
                 <small>{t("固定 seed 每批递增")}</small>
-              </label>
+              </label>}
               <button type="button" role="menuitem" onClick={() => runVdWorkflow('all')}>
                 <span>{t("运行全部")}</span><small>{String(runnableCount)} {t("个可执行节点")}</small>
               </button>
@@ -1105,13 +1113,6 @@ interface NodeContextMenuPosition {
   screen: { x: number; y: number }
 }
 
-const INPUT_FILE_ACCEPTS = {
-  text: 'text/*,.txt,.md,.markdown,.csv,.json,.srt,.vtt,.log',
-  image: 'image/png,image/jpeg,image/webp,image/gif',
-  audio: 'audio/mpeg,audio/wav,audio/ogg,audio/flac,audio/mp4,audio/webm',
-  video: 'video/mp4,video/webm,video/quicktime,.m4v',
-}
-
 interface ParameterInputPickerPosition {
   nodeId: string
   screen: { x: number; y: number }
@@ -1123,6 +1124,7 @@ const REMOTE_NODE_KINDS = new Set<DirectorNodeData['kind']>([
   'image-edit',
   'video-generation',
   'audio-generation',
+  'video-trim', 'video-crop', 'video-extract-frame',
   'vram-trigger',
   'ollama-eject',
   'comfyui-clear',
@@ -1143,7 +1145,10 @@ function NodeContextMenu({
   onRename,
   onDetails,
   onReplace,
+  onChooseAsset,
   onInspect,
+  editableMedia,
+  onEditMedia,
   uploading,
   videoPreview,
   onSaveVideo,
@@ -1165,7 +1170,10 @@ function NodeContextMenu({
   onRename(): void
   onDetails(): void
   onReplace(): void
+  onChooseAsset(): void
   onInspect(): void
+  editableMedia?: 'audio' | 'video'
+  onEditMedia(): void
   uploading: boolean
   videoPreview: boolean
   onSaveVideo(): void
@@ -1180,7 +1188,7 @@ function NodeContextMenu({
   const runnable = REMOTE_NODE_KINDS.has(node.data.kind) || dependencyRunnable
   const maskable = (node.data.mediaKind === 'image' || node.data.mediaKind === 'video') && node.data.asset !== undefined
   const clip = node.data.mediaKind === 'audio' || node.data.mediaKind === 'video'
-  const mediaInput = node.data.kind === 'load-image' || node.data.kind === 'load-video'
+  const mediaInput = node.data.kind === 'load-image' || node.data.kind === 'load-audio' || node.data.kind === 'load-video'
   useEffect(() => {
     const firstItem = menuRef.current?.querySelector<HTMLButtonElement>('button[role="menuitem"]:not(:disabled)')
     const focusTarget = firstItem ?? menuRef.current
@@ -1245,6 +1253,9 @@ function NodeContextMenu({
         <strong>{node.data.title}</strong>
         <span>{node.data.kind}</span>
       </header>
+      {editableMedia ? <div className="vd-node-context-group"><button type="button" role="menuitem" onClick={onEditMedia}>
+        <MediaEditorIcon name="trim" /><span>{t(editableMedia === 'audio' ? 'Edit Audio' : 'Edit Video')}</span>
+      </button></div> : null}
       {mediaInput ? (
         <div className="vd-node-context-group">
           <button type="button" role="menuitem" disabled={uploading} onClick={onReplace}>
@@ -1255,6 +1266,11 @@ function NodeContextMenu({
           </button>
         </div>
       ) : null}
+      {mediaInput || node.data.kind === 'load-sketch' ? <div className="vd-node-context-group">
+        <button type="button" role="menuitem" disabled={uploading} onClick={onChooseAsset}>
+          <GalleryIcon /><span>{t('Choose from assets')}</span>
+        </button>
+      </div> : null}
       {runnable ? (
         <div className="vd-node-context-group">
           {busy ? (
@@ -1589,16 +1605,16 @@ function NodeAddMenu({
     }
     const regular: NodeMenuItem[] = [
       { key: 'input:text', label: 'Text', description: t("添加可编辑文字输入"), category: 'Inputs', icon: 'T', search: 'text 文字 input', action: { kind: 'text' }, inputs: [] },
-      { key: 'input:image', label: 'Image', description: t("从本地选择图像"), category: 'Inputs', icon: '▧', search: 'image 图像 图片 input', action: { kind: 'file', mediaKind: 'image' }, inputs: [] },
-      { key: 'input:audio', label: 'Audio', description: t("从本地选择音频"), category: 'Inputs', icon: '♫', search: 'audio 音频 input', action: { kind: 'file', mediaKind: 'audio' }, inputs: [] },
-      { key: 'input:video', label: 'Video', description: t("从本地选择视频"), category: 'Inputs', icon: '▶', search: 'video 视频 input', action: { kind: 'file', mediaKind: 'video' }, inputs: [] },
-      { key: 'input:sketch', label: 'Sketch', description: t("绘制并添加草稿"), category: 'Inputs', icon: '✎', search: 'sketch 草稿 手绘 input', action: { kind: 'sketch' }, inputs: [] },
+      { key: 'input:image', label: 'Image', description: t('Add an empty image input'), category: 'Inputs', icon: '▧', search: 'image 图像 图片 input', action: { kind: 'file', mediaKind: 'image' }, inputs: [] },
+      { key: 'input:audio', label: 'Audio', description: t('Add an empty audio input'), category: 'Inputs', icon: '♫', search: 'audio 音频 input', action: { kind: 'file', mediaKind: 'audio' }, inputs: [] },
+      { key: 'input:video', label: 'Video', description: t('Add an empty video input'), category: 'Inputs', icon: '▶', search: 'video 视频 input', action: { kind: 'file', mediaKind: 'video' }, inputs: [] },
+      { key: 'input:sketch', label: 'Sketch', description: t('Draw a sketch or choose an existing asset'), category: 'Inputs', icon: '✎', search: 'sketch 草稿 手绘 input', action: { kind: 'sketch' }, inputs: [] },
       { key: 'workflow:prompt', label: 'Prompt Enhancer', description: t("扩写与优化提示词"), category: 'Workflows', icon: '✨', search: 'prompt enhancer 提示词 增强 workflow', action: { kind: 'workflow', workflowKind: 'prompt-enhancer' }, inputs: workflowInputs('prompt-enhancer') },
       { key: 'workflow:image', label: 'Image Processing', description: t("通过已配置 workflow 处理图像"), category: 'Workflows', icon: '◈', search: 'image processing generate edit 处理生成编辑图像 workflow', action: { kind: 'workflow', workflowKind: 'image-generation' }, inputs: workflowInputs('image-generation') },
       { key: 'workflow:video', label: 'H3 Video', description: t("通过 MiniMax H3 生成视频"), category: 'Workflows', icon: '◉', search: 'h3 minimax video 视频 workflow', action: { kind: 'workflow', workflowKind: 'video-generation' }, inputs: workflowInputs('video-generation') },
       { key: 'workflow:audio', label: 'H3 Audio', description: t("通过 MiniMax H3 生成音频"), category: 'Workflows', icon: '∿', search: 'h3 minimax audio 音频 workflow', action: { kind: 'workflow', workflowKind: 'audio-generation' }, inputs: workflowInputs('audio-generation') },
     ]
-    const outputDefinitions = definitions.filter(definition => definition.type === 'core.preview' || definition.type === 'core.save')
+    const outputDefinitions = definitions.filter(definition => definition.type === 'core.preview' || definition.type === 'core.save' || definition.type === 'core.batch-output')
       .map<NodeMenuItem>(definition => ({
         key: `${definition.type}@${definition.version}`,
         label: definition.title,
@@ -1609,6 +1625,10 @@ function NodeAddMenu({
         action: { kind: 'definition', type: definition.type, version: definition.version },
         inputs: definition.inputs,
       }))
+    const batchInputs = definitions.filter(definition => definition.type === 'core.batch-input').map<NodeMenuItem>(definition => ({
+      key: `${definition.type}@${definition.version}`, label: definition.title, description: definition.description, category: 'Inputs', icon: '▤',
+      search: 'batch input 批量 输入 directory regex', action: { kind: 'definition', type: definition.type, version: definition.version }, inputs: [],
+    }))
     const utilityDefinitions = definitions.filter(definition => definition.behavior === 'trigger')
       .map<NodeMenuItem>(definition => ({
         key: `${definition.type}@${definition.version}`,
@@ -1623,7 +1643,10 @@ function NodeAddMenu({
     const customDefinitions = definitions.filter(definition => (
       definition.type !== 'core.preview'
       && definition.type !== 'core.save'
+      && definition.type !== 'core.batch-input'
+      && definition.type !== 'core.batch-output'
       && definition.behavior !== 'trigger'
+      && definition.behavior !== 'media'
     ))
       .map<NodeMenuItem>(definition => ({
         key: `${definition.type}@${definition.version}`,
@@ -1635,7 +1658,7 @@ function NodeAddMenu({
         action: { kind: 'definition', type: definition.type, version: definition.version },
         inputs: definition.inputs,
       }))
-    return [...regular, ...utilityDefinitions, ...outputDefinitions, ...customDefinitions]
+    return [...regular, ...batchInputs, ...utilityDefinitions, ...outputDefinitions, ...customDefinitions]
   }, [definitions, language])
   const candidates: NodeMenuCandidate[] = position.connection === undefined
     ? items.map(item => ({ item }))
@@ -1727,6 +1750,7 @@ function CanvasStage({
   const [sketchOpen, setSketchOpen] = useState(false)
   const [sketchPosition, setSketchPosition] = useState<{ x: number; y: number } | undefined>()
   const [sketchNodeId, setSketchNodeId] = useState<string | null>(null)
+  const [assetPickerNodeId, setAssetPickerNodeId] = useState<string | null>(null)
   const [maskNodeId, setMaskNodeId] = useState<string | null>(null)
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null)
   const [measuredNodeSizes, setMeasuredNodeSizes] = useState<Record<string, { width: number; height: number }>>({})
@@ -1740,7 +1764,7 @@ function CanvasStage({
   const [selectionBox, setSelectionBox] = useState<{ x: number; y: number; width: number; height: number } | null>(null)
   const [parameterInputPicker, setParameterInputPicker] = useState<ParameterInputPickerPosition | null>(null)
   const [detailsNodeId, setDetailsNodeId] = useState<string | null>(null)
-  const [openArtifact, setOpenArtifact] = useState<{ artifact: PreviewArtifact; properties: boolean } | null>(null)
+  const [openArtifact, setOpenArtifact] = useState<{ artifact: PreviewArtifact; properties: boolean; edit?: boolean } | null>(null)
   const [uploading, setUploading] = useState(false)
   const [miniMapVisible, setMiniMapVisible] = useState(true)
   const [controlsLayer, setControlsLayer] = useState<HTMLDivElement | null>(null)
@@ -1751,7 +1775,7 @@ function CanvasStage({
   const selectionGestureRef = useRef<{ pointerId: number; x: number; y: number; moved: boolean; nodeId?: string; previous: Set<string> } | null>(null)
   const pendingFileRef = useRef<
     | { action: 'add'; mediaKind: 'image' | 'audio' | 'video'; position: { x: number; y: number } }
-    | { action: 'replace'; nodeId: string; mediaKind: 'text' | 'image' | 'video' }
+    | { action: 'replace'; nodeId: string; mediaKind: InputFileKind }
     | null
   >(null)
   const nodeTypes = useMemo(() => ({ director: DirectorNodeView }), [])
@@ -1773,6 +1797,7 @@ function CanvasStage({
     setSketchOpen(false)
     setSketchPosition(undefined)
     setSketchNodeId(null)
+    setAssetPickerNodeId(null)
   }, [onSelectedNodeIdsChange, project?.id, snapshot.canvasResetVersion])
 
   useEffect(() => {
@@ -2030,17 +2055,9 @@ function CanvasStage({
           })
       }
       if (action.kind === 'sketch') {
-        setSketchNodeId(null)
-        setSketchPosition(position)
-        setSketchOpen(true)
+        director.addInputNode('sketch', position)
       }
-      if (action.kind === 'file') {
-        const input = fileInputRef.current
-        if (input === null) return
-        pendingFileRef.current = { action: 'add', mediaKind: action.mediaKind, position }
-        input.accept = INPUT_FILE_ACCEPTS[action.mediaKind]
-        input.click()
-      }
+      if (action.kind === 'file') director.addInputNode(action.mediaKind, position)
     } catch (error) { swallow(error) }
   }, [director, nodeMenu, snapshot.nodeDefinitions])
 
@@ -2087,19 +2104,29 @@ function CanvasStage({
     const node = project?.graph.nodes.find(candidate => candidate.id === nodeId)
     const input = fileInputRef.current
     if (node === undefined || input === null || uploading) return
-    const kind = node.data.kind === 'load-text' ? 'text'
-      : node.data.kind === 'load-image' ? 'image'
-        : node.data.kind === 'load-video' ? 'video' : undefined
+    const kind = inputFileKind(node.data.kind)
     if (kind === undefined) return
     pendingFileRef.current = { action: 'replace', nodeId, mediaKind: kind }
     input.accept = INPUT_FILE_ACCEPTS[kind]
     input.click()
   }, [project, uploading])
 
+  const replaceInputFile = useCallback(async (nodeId: string, file: File): Promise<void> => {
+    setUploading(true)
+    try { await director.replaceInputFile(nodeId, file) } finally { setUploading(false) }
+  }, [director])
+
+  const importBatchFiles = useCallback(async (nodeId: string, files: File[], directory: boolean): Promise<void> => {
+    setUploading(true)
+    try { await director.importBatchFiles(nodeId, files, directory) } finally { setUploading(false) }
+  }, [director])
+
   const inspectInput = useCallback((nodeId: string): void => {
     const asset = project?.graph.nodes.find(candidate => candidate.id === nodeId)?.data.asset
     if (asset !== undefined) setOpenArtifact({ artifact: previewArtifactFromAsset(asset), properties: false })
   }, [project])
+
+  const loadInputAssets = useCallback((kind: InputAssetKind) => director.listInputAssets(kind), [director])
 
   const runtime = useMemo<DirectorRuntimeValue>(() => ({
     providers: snapshot.providers,
@@ -2108,24 +2135,35 @@ function CanvasStage({
     references: referencePreviews,
     onChange: (id, patch) => director.updateNode(id, patch),
     onChooseInputFile: chooseInputFile,
+    onChooseExistingAsset: setAssetPickerNodeId,
+    onReplaceInputFile: replaceInputFile,
+    inputFilesBusy: uploading,
     onInspectInput: inspectInput,
     onRefreshModels: providerId => director.refreshProviderModels(providerId),
     onEjectModel: (providerId, model) => director.unloadProviderModel(providerId, model),
     onRunNode: nodeId => director.runNode(nodeId),
+    batchRuns: snapshot.workflowRuns.filter(run => run.kind === 'batch' && run.projectId === project?.id),
+    batchCases: snapshot.batchCases,
+    batchWarnings: Object.fromEntries((project?.graph.nodes ?? []).filter(node => node.data.kind === 'batch-input').map(node => [node.id, batchFrozenWarnings(project!.graph, node.id)])),
+    onImportBatchFiles: importBatchFiles,
+    onRunBatch: (nodeId, resumeId) => director.runBatch(nodeId, resumeId),
+    onCancelBatch: runId => director.cancelVdRun(runId),
+    onLoadBatchCases: runId => director.loadBatchCases(runId),
     onEditSketch: nodeId => {
       const node = project?.graph.nodes.find(candidate => candidate.id === nodeId)
-      if (node?.data.kind !== 'load-sketch' || node.data.asset === undefined) return
+      if (node?.data.kind !== 'load-sketch') return
       setSketchNodeId(nodeId)
       setSketchPosition(undefined)
       setSketchOpen(true)
     },
-  }), [director, project, referencePreviews, snapshot.nodeDefinitions, snapshot.providers, snapshot.workflows, chooseInputFile, inspectInput])
+  }), [director, project, referencePreviews, snapshot.nodeDefinitions, snapshot.providers, snapshot.workflows, snapshot.workflowRuns, snapshot.batchCases, chooseInputFile, inspectInput, replaceInputFile, importBatchFiles, uploading])
 
   if (project === null) return null
   const selectedEdge = project.graph.edges.find(edge => edge.id === selectedEdgeId)
   const sketchNode = sketchNodeId === null ? undefined : project.graph.nodes.find(node => (
     node.id === sketchNodeId && node.data.kind === 'load-sketch'
   ))
+  const assetPickerNode = project.graph.nodes.find(node => node.id === assetPickerNodeId)
   const maskNode = maskNodeId === null ? undefined : project.graph.nodes.find(node => node.id === maskNodeId)
   const contextNode = nodeContextMenu === null ? undefined : project.graph.nodes.find(node => node.id === nodeContextMenu.nodeId)
   const parameterInputNode = parameterInputPicker === null ? undefined : project.graph.nodes.find(node => node.id === parameterInputPicker.nodeId)
@@ -2138,6 +2176,7 @@ function CanvasStage({
     ? (contextNode.data.assets ?? (contextNode.data.asset === undefined ? [] : [contextNode.data.asset]))
       .find(asset => asset.kind === 'video')
     : undefined
+  const contextMediaAsset = [contextNode?.data.asset, ...(contextNode?.data.assets ?? [])].find(asset => asset?.kind === 'audio' || asset?.kind === 'video')
   const contextWorkflowReady = contextProvider?.kind !== 'comfyui'
     && contextProvider?.kind !== 'comfyui-mcp'
     ? true
@@ -2513,9 +2552,18 @@ function CanvasStage({
           node={contextNode}
           canRun={contextCanRun}
           uploading={uploading}
+          editableMedia={contextMediaAsset?.kind as 'audio' | 'video' | undefined}
+          onEditMedia={() => {
+            setNodeContextMenu(null)
+            if (contextMediaAsset) setOpenArtifact({ artifact: previewArtifactFromAsset(contextMediaAsset), properties: false, edit: true })
+          }}
           onReplace={() => {
             setNodeContextMenu(null)
             chooseInputFile(contextNode.id)
+          }}
+          onChooseAsset={() => {
+            setNodeContextMenu(null)
+            setAssetPickerNodeId(contextNode.id)
           }}
           onInspect={() => {
             setNodeContextMenu(null)
@@ -2590,6 +2638,7 @@ function CanvasStage({
         <ArtifactPreviewDialog
           artifact={openArtifact.artifact}
           initialPropertiesOpen={openArtifact.properties}
+          initialEdit={openArtifact.edit}
           onClose={() => setOpenArtifact(null)}
         />
       )}
@@ -2612,6 +2661,11 @@ function CanvasStage({
             .finally(() => setUploading(false))
         }}
       />
+      {assetPickerNode && /^load-(image|video|audio|sketch)$/u.test(assetPickerNode.data.kind) ? <AssetPicker
+        key={`${project.id}:${assetPickerNode.id}`} kind={assetPickerNode.data.kind.slice(5) as InputAssetKind}
+        nodeTitle={assetPickerNode.data.title} currentAssetId={assetPickerNode.data.asset?.id} load={loadInputAssets}
+        onSelect={asset => director.useExistingAsset(assetPickerNode.id, asset)} onClose={() => setAssetPickerNodeId(null)}
+      /> : null}
       <SketchModal
         open={sketchOpen}
         initialDocument={sketchNode?.data.sketchDocument}
@@ -2743,7 +2797,7 @@ export function DirectorOverlay({ director, chat }: DirectorInjectedProps) {
   }
   if (!snapshot.open) return null
   return (
-    <>
+    <MediaEditingContext.Provider value={director.editMedia}>
       <style>{`${xyflowStyles}\n${styles}`}</style>
       <div className="vd-shell" role="dialog" aria-modal="true" aria-label="Video Director">
         <TopBar
@@ -2848,6 +2902,6 @@ export function DirectorOverlay({ director, chat }: DirectorInjectedProps) {
         ) : null}
         {settingsOpen ? <SettingsDrawer snapshot={snapshot} director={director} onClose={() => setSettingsOpen(false)} /> : null}
       </div>
-    </>
+    </MediaEditingContext.Provider>
   )
 }

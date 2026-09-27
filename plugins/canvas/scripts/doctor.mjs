@@ -18,7 +18,7 @@ try {
 const nodeParts = process.versions.node.split('.').map(Number)
 const supported = (nodeParts[0] === 22 && nodeParts[1] >= 19) || nodeParts[0] >= 24
 check('Node.js', supported ? 'ok' : 'required', process.version + (supported ? '' : '; install Node 22.19+ (22.x) or 24+'))
-for (const [name, path] of [['Dependencies', 'node_modules/@openai/codex-sdk/package.json'], ['Browser build', 'dist/index.html']]) {
+for (const [name, path] of [['Dependencies', 'node_modules/@openai/codex-sdk/package.json'], ['Browser build', 'dist/index.html'], ['Workflow execution build', 'dist/workflow-execution.js']]) {
   try { await access(root + path, constants.R_OK); check(name, 'ok', 'present') }
   catch { check(name, 'required', 'Run node scripts/setup.mjs from the plugin directory') }
 }
@@ -33,7 +33,7 @@ if (cli.status === 0) {
 }
 for (const command of ['ffmpeg', 'ffprobe']) {
   const probe = spawnSync(command, ['-version'], { encoding: 'utf8', timeout: 5000 })
-  check(command, probe.status === 0 ? 'ok' : 'optional', probe.status === 0 ? 'available' : command === 'ffprobe' ? 'Needed for video metadata in Canvas previews' : 'Needed for local finishing with the Drama production plugin')
+  check(command, probe.status === 0 ? 'ok' : 'optional', probe.status === 0 ? 'available' : command === 'ffprobe' ? 'Needed for audio/video metadata and editing in Canvas' : 'Needed for Canvas audio/video trimming, cropping, and frame extraction')
 }
 if (process.argv.includes('--probe')) {
   const targets = [['Canvas server', process.env.CANVAS_URL || `http://127.0.0.1:${process.env.CANVAS_PORT || DEFAULT_PORT}`, '/health'], ['ComfyUI', process.env.COMFYUI_URL || 'http://127.0.0.1:8188', '/system_stats']]

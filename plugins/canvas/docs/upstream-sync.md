@@ -1,34 +1,49 @@
-# Canvas 0.4.0: upstream v0.4.0 sync
+# Canvas 0.5.0: upstream v0.4.1 and v0.5.0 sync
 
-Source: [chiphoton/DeepSeek-Harness-Video-Director](https://github.com/chiphoton/DeepSeek-Harness-Video-Director) (`dsh-video-director`). This sync uses **`uncensored` commit `4964977426229c2760cf519197b40a0ec6181825`**, titled `v0.4.0: updated job queue mechanism, media editor, and ui panel`.
+Source: [chiphoton/DeepSeek-Harness-Video-Director](https://github.com/chiphoton/DeepSeek-Harness-Video-Director), `uncensored` branch. Canvas was previously pinned to v0.4.0 `4964977426229c2760cf519197b40a0ec6181825`. This sync includes both subsequent release commits:
 
-Canvas's plugin and npm versions follow the upstream release version, starting with this aligned `0.4.0` release. Upstream's npm manifest still says `0.1.2`, so the release commit identifies the version being synced. `upstream-lock.json` pins the repository, branch, commit, and file hashes for each sync.
+| Release | Exact commit | Changes |
+|---|---|---|
+| v0.4.1 | `a7cd2ea3e882c173c63e5d0db4260237c249fdbb` | Media preview performance, shared observation, task pagination and timing, HTTP range fixes |
+| v0.5.0 | `dd33d909d21d4c525d2682af0254fb928ad4441c` | Multimodal chat references, canvas commands and draft conflicts, provider settings, asset pagination, numeric inputs |
 
-The previous source was v0.3.0 commit `0353b43c879b3f6bd13e2100320b4680bebca39e`. The intervening v0.3.1 UI changes are included.
+Canvas's npm manifest, lockfile, plugin manifest and health endpoint now report **0.5.0**. The upstream npm manifest still reports 0.1.2; the release commits identify the synchronized versions. `upstream-lock.json` records hashes of upstream originals at the exact v0.5.0 commit. Adapted files intentionally differ from those hashes.
+
+## Feature mapping
 
 | Upstream change | Codex integration |
 |---|---|
-| Persistent global workflow queue | `WorkflowScheduler` and `RunQueue` run in the standalone Canvas server. Graph stages, triggers, repetitions, and case batches continue after tabs close. Queued snapshots recover on server startup; interrupted active runs are not resubmitted. Shutdown closes the scheduler before providers, and storage changes attach a new scheduler to the copied store. |
-| Shared execution semantics | `scripts/build-client.mjs` emits `dist/workflow-execution.js` for Node alongside the browser bundle. Doctor checks both builds; no Harness bundle or runtime is required. |
-| Batch Input and Batch Output | Text/file/folder cases, regex filtering, one-based ranges, fixed per-case seeds, durable receipts, retry/resume, and TAR export. Canvas's browser policy permits the blob worker used to bound regex evaluation. |
-| Tasks panel | Compact global run cards, workflow filtering, elapsed timing, artifact/workflow downloads, submitted graph opening, history removal, and a properties/cancellation dialog. Global `jobs/list` and `vd-runs/list` drive the client; the existing `tasks/list` RPC remains available for integrations. |
-| Folders and selection | Nested virtual folders, drag/keyboard ordering, Multi-Select move/delete, revision conflicts, and draft-aware project operations retain Canvas conversation bindings. |
-| Asset chooser and storage layout | Empty media inputs, file drops, reusable cross-workflow assets, independent duplicate references, and input/output folders with recoverable legacy migration. Native Codex image imports are explicitly marked as outputs; original Codex files stay in place. |
-| Audio/video editing | Waveform audio playback, trim/crop selection, frame export, save/copy/export actions, and local FFmpeg workflow nodes use loopback RPC and media metadata routes. Errors and doctor guidance name the Canvas host. |
-| H3 reference workflow | Expanded typed references and Turbo workflow controls come from the exact `uncensored` node manifest. Existing workflow IDs and archive markers remain compatible. |
+| Media performance | One workflow observation loop; unchanged snapshots retain identity; elapsed clocks update separately; offscreen video thumbnails detach sources; stable media metadata effects; satisfiable byte ranges clamp to EOF and abandoned streams stop reading. |
+| Task history | `jobs/history` pages ten grouped records with a stable timestamp/ID cursor. Per-filter pages stay in controller memory until reload. Active observation is separate from historical paging; card cancellation, fixed completion durations, receipts and artifact downloads remain available. |
+| Asset chooser | Server-side text/source filtering and fifteen-result pages, independent preview/selection, lazy thumbnails and retryable loading. |
+| Chat references | Persistent Image/Audio/Video/Folder/Node aliases, token-aware editor and clipboard handling, title/context-menu node references, searchable folder preview, sequential uploads, historical alias preservation. Reservation calls are serialized before asynchronous project reads to keep concurrent numbering deterministic. |
+| Canvas agent | Shared `editVdCanvas` graph operations and `createCanvasAgent` run in the standalone server. Queries are scoped/paged; edit batches are atomic; media, validation, queue execution, cancellation and saving reuse existing services. New text/image nodes retain Codex Plan defaults. |
+| Codex transport | `CodexCanvasMcp` exposes `vd_canvas` over authenticated loopback Streamable HTTP. Each SDK turn gets a fresh project/session capability; cancellation or completion revokes it. Image results use MCP image content and the selected model's vision capability. Tool progress appears in the local transcript. |
+| Concurrent editing | A separate `draftRevision` protects browser writes, agent edits, discard and save. Send flushes browser edits. The shared observer adopts newer remote drafts only when there are no unacknowledged local changes. Conflict recovery offers an export and explicit selection of the server version. |
+| Connections | Autosave on blur/Enter, immediate Fast toggle, one refresh action, categorized ComfyUI model inventory, and Ollama/ComfyUI unloading. Keep Codex Plan naming, live account catalog, default effort and Settings-only Fast control. |
+| Numeric controls | Partial/empty numeric drafts remain editable; valid values commit on blur or Enter with bounds and integer normalization. |
 
-Canvas retains `.codex-plugin/plugin.json`, its standalone HTTP host and origin checks, local sessions, Codex Plan text/image defaults, account model discovery, adviser chat, `CANVAS_*` settings, `.canvas-storage.json`, bilingual UI, and setup/doctor/CLI helpers. Harness's Cordis entry points, injected dependencies, native chat transport, settings schema, launcher, and close controls are excluded. Package dependencies remain locked to Canvas's existing versions.
+The original Harness `canvasTool` wrapper is replaced by the Codex MCP adapter, and native DSH chat transport remains excluded. Cordis registration, Harness entry points, dependency injection, launcher and packaging are not copied. The local HTTP host, same-origin checks, sessions, `CANVAS_*` environment settings, persistent storage migration, plugin skill, Codex image imports and cleared Preview propagation are retained. No dependency versions changed.
 
-The previous Canvas browser scheduler is superseded by the server queue. Cross-project execution remains supported, with complete workflows now serialized globally. The Canvas fix for fresh outputs passing through cleared Preview chains is retained in the shared execution helpers and applied by both the server and browser. Historical output restoration remains suppressed after Clear Previews; frozen references remain unchanged. Batch Output waits for the submission receipt before loading case records, preventing a transient run-not-found error. Its bilingual help text reflects server-owned execution.
+The SDK accepts per-instance Codex configuration overrides; its `mcp_servers.canvas` entry uses a loopback URL, a temporary authorization header, the `vd_canvas` tool allowlist and a bounded tool timeout. This follows [Codex MCP configuration](https://developers.openai.com/codex/mcp). No persistent user Codex config or plugin-wide MCP registration is necessary. The bridge overrides caller-supplied project/session identity with the owning turn's scope and rechecks the project's current binding on each command. Expired tokens fail authorization, and cross-origin requests still fail the HTTP host's existing checks.
 
-`upstream-lock.json` records SHA-256 hashes of upstream originals for each shared/adapted file at the exact commit. These are provenance hashes, not checksums of the Codex adaptations. Codex-only hosting files and packaging are outside that list. No user projects, credentials, generated media, caches, or dependency directories were copied from the source checkout. The original MIT license remains in place.
+Legacy unbound SDK conversations remain usable for advice without canvas tools. Bound chat can keep operating while its turn is active after the tab closes; this does not start autonomous new turns or install a daemon. Accepted workflow runs continue on the existing server queue.
 
-## Upgrade
+## Upgrade and development
 
-Finish or cancel runs in the old Canvas 0.2.0 client before stopping its server. Run `node scripts/setup.mjs`, start the updated server with the same data directory, and reload tabs. Back up the data directory before upgrading. First startup verifies and migrates legacy flat asset files into `assets/inputs/` and `assets/outputs/`, recording a recovery journal while retaining asset IDs and URLs. New accepted runs survive tab reloads and closures; the server and computer must stay running.
+Finish or cancel active work, rebuild with `node scripts/setup.mjs`, restart Canvas with the existing data directory, and reload open tabs. Reloading matters because old clients that omit draft revisions cannot protect concurrent edits. For upgrades from Canvas 0.2.0 or earlier, the existing asset-layout migration and switch to server-owned workflow execution still apply. Keep the data directory outside the plugin installation and back it up before upgrading.
 
-## Validation
+`npm run check` passed: browser/shared server builds, TypeScript and all **534 tests**. `git diff --check` verifies patch formatting. New and ported coverage includes references, atomic edits, draft conflict recovery, pagination, observation stability, numeric inputs, provider autosave/inventories and Codex MCP HTTP integration. The latter uses a simulated SDK client over real loopback HTTP to verify tool discovery, edits, project isolation, stale revisions, cancellation, token expiry, vision checks and thread resumption. It does not call a paid model.
 
-`npm run check` builds both bundles, type-checks the client, and passes 471 tests. Coverage includes global queue order, browser disconnection, cancellation, shutdown/restart recovery, batch case receipts/retry/export, project folders, asset migration and sharing, media editing, and cleared/frozen Preview propagation. Codex host integration checks use temporary storage and simulated providers over real loopback HTTP, including scheduling after a storage move and placing generated Codex images in the output folder. No paid provider generation is needed for these checks.
+Two synthetic browser fixtures remain available, both requiring FFmpeg:
 
-Browser QA used a temporary data directory and simulated Codex providers. It verified regex workers, a two-case batch before and after client reload, completed case previews, Tasks, project folders, and the asset chooser. Real FFmpeg editing trimmed a generated two-second clip to 1.25 seconds and cropped it from 480 × 270 to 270 × 270; the rendered result was inspected in the browser.
+```sh
+node scripts/debug/sidebar-chat.mjs
+node scripts/debug/media-preview.mjs
+```
+
+The sidebar fixture uses the actual standalone server and local chat adapter with simulated Codex/providers; sending a message creates a synthetic Text node through MCP. The performance fixture supplies a large synthetic canvas and paged task history. Both print their temporary URL/data root and remove that data on shutdown. Neither accesses user projects or sends paid generation requests.
+
+Browser QA confirmed node-title references, chat-created nodes arriving on the canvas, provider autosave and categorized model lists, asset paging from 15 to 30 and filtered selection, and task paging from 10 to 20 with 20 retained after reopening. In the performance fixture, 40 video thumbnail elements had only 2 attached sources at the initial viewport. Neither fixture logged browser errors during these checks. These are integration checks, not a live model quality or production Safari performance benchmark. See [chat architecture](sidebar-chat-architecture-2026-09-28.md) and [media performance notes](media-preview-performance-2026-09-27.md).
+
+The source checkout and existing user data were not changed. The original MIT license remains in place. The pre-existing untracked `docs/codex-sidebar-evaluation.md` was left untouched.

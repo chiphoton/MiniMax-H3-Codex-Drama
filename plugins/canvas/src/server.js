@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import { ChatSessions } from './chat-sessions.js'
+import { CodexCanvasMcp } from './codex-canvas-mcp.js'
 import { codexRuntimeAccess } from './codex-environment.js'
 import { CodexModelCatalog } from './codex-model-catalog.js'
 import { ExampleProjects } from './example-projects.js'
@@ -55,9 +56,10 @@ async function createRuntime(dataDir, options) {
   providers = new ProviderRuntime({ store, ...providerSettings.resolved(), ...(options.providerOptions ?? {}), codexModels })
   const jobs = new JobManager(store, providers, { concurrency: options.jobConcurrency ?? 2 })
   await jobs.recover()
-  const sessions = new ChatSessions(store.root, { createCodex: options.createCodex, codexModels, getProvider: () => providerSettings.resolved().providers.find(provider => provider.kind === 'codex-plan') })
-  await sessions.init()
   const directorRpc = createDirectorRpc({ store, workflows, nodes, providers, jobs, providerSettings, registerAsset: async () => {} })
+  const mcp = new CodexCanvasMcp({ store, call: directorRpc, getUrl: options.getCanvasUrl })
+  const sessions = new ChatSessions(store.root, { createCodex: options.createCodex, codexModels, openCanvasTools: scope => mcp.open(scope), getProvider: () => providerSettings.resolved().providers.find(provider => provider.kind === 'codex-plan') })
+  await sessions.init()
   await jobs.workflowScheduler.recover()
   const examples = new ExampleProjects(options.examplesDir)
 
@@ -82,7 +84,7 @@ async function createRuntime(dataDir, options) {
     }
     return { ok: true, value }
   }
-  return { store, providers, jobs, sessions, codexModels, rpc }
+  return { store, providers, jobs, sessions, codexModels, rpc, mcp }
 }
 
 async function activeWorkReason(runtime) {
@@ -98,6 +100,8 @@ async function activeWorkReason(runtime) {
 
 /** A loopback HTTP host for the migrated engine; it does not need Harness. */
 export async function createCanvasServer(options = {}) {
+  let baseUrl
+  options = { ...options, getCanvasUrl: () => baseUrl }
   const location = await loadStorageLocation(options.dataDir ?? dataDirectory())
   let runtime = await createRuntime(location.dataDir, options)
   const defaultDataDir = await realpath(dirname(location.settingsPath))
@@ -183,7 +187,21 @@ export async function createCanvasServer(options = {}) {
       if ((request.headers.origin && request.headers.origin !== origin)
         || request.headers['sec-fetch-site'] === 'cross-site') return sendJson(response, 403, { error: 'Cross-origin requests are not allowed' })
       const url = new URL(request.url, origin)
-      if (request.method === 'GET' && url.pathname === '/health') return sendJson(response, 200, { ok: true, app: 'canvas', version: '0.4.0', dataDir: runtime.store.root, codexRuntime: codexRuntimeAccess() })
+      if (request.method === 'GET' && url.pathname === '/health') return sendJson(response, 200, { ok: true, app: 'canvas', version: '0.5.0', dataDir: runtime.store.root, codexRuntime: codexRuntimeAccess() })
+      if (url.pathname === '/mcp/canvas') {
+        if (!runtime.mcp.authorized(request.headers.authorization)) return sendJson(response, 401, { error: 'Canvas tool session expired' })
+        if (request.method !== 'POST') {
+          response.setHeader('Allow', 'POST')
+          return sendJson(response, 405, { error: 'Use POST' })
+        }
+        if (!request.headers['content-type']?.startsWith('application/json')) return sendJson(response, 415, { error: 'Use application/json' })
+        const body = await readJson(request)
+        const controller = new AbortController()
+        response.on('close', () => { if (!response.writableEnded) controller.abort() })
+        const result = await runtime.mcp.handle(request.headers.authorization, body, controller.signal)
+        if (result === null) { response.writeHead(202); response.end(); return }
+        return sendJson(response, 200, result)
+      }
       if (request.method === 'POST' && url.pathname === '/api/rpc') {
         if (!request.headers['content-type']?.startsWith('application/json')) return sendJson(response, 415, { error: 'Use application/json' })
         const body = await readJson(request)
@@ -230,7 +248,8 @@ export async function createCanvasServer(options = {}) {
     get sessions() { return runtime.sessions },
     async listen(port = serverPort()) {
       await new Promise((resolve, reject) => { server.once('error', reject); server.listen(port, '127.0.0.1', () => { server.off('error', reject); resolve() }) })
-      return `http://127.0.0.1:${server.address().port}`
+      baseUrl = `http://127.0.0.1:${server.address().port}`
+      return baseUrl
     },
     async close() {
       if (closing) return closePromise

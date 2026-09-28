@@ -1,8 +1,11 @@
+import { ChatAttachmentRegistry } from './chat-attachments'
 import type { DirectorController } from './controller'
 import type { ChatMessage, ChatModelDirectoryState, ChatModelSelection, ChatSnapshot, ClientContext, ProviderDescriptor } from './types'
 
 export interface ProjectChatMessage extends ChatMessage {
-  kind: 'user' | 'assistant'
+  kind: 'user' | 'assistant' | 'tool-call' | 'tool-result'
+  toolName?: string
+  callId?: string
   status: 'pending' | 'streaming' | 'complete' | 'error'
 }
 
@@ -51,6 +54,7 @@ export class ProjectChatSource {
   private refreshVersion = 0
   private dismissedError: string | null = null
   private disposed = false
+  private readonly attachmentRegistries = new Map<string, ChatAttachmentRegistry>()
   private release: () => void
 
   constructor(private ctx: ClientContext, private director: DirectorController) {
@@ -103,16 +107,47 @@ export class ProjectChatSource {
       }
     }
   }
-  send = async (text: string, images: readonly File[] = []): Promise<void> => {
+  attachments(): ChatAttachmentRegistry {
+    const project = this.director.getSnapshot().project
+    if (!project) throw new Error('Select a workflow first')
+    const key = `${project.id}:${project.sessionId}`
+    let registry = this.attachmentRegistries.get(key)
+    if (!registry) {
+      registry = new ChatAttachmentRegistry(input => this.director.chatReferences(input), project.id, project.sessionId)
+      this.attachmentRegistries.set(key, registry)
+    }
+    return registry
+  }
+
+  async sendAttachments(text: string): Promise<void> {
+    const project = this.director.getSnapshot().project
+    if (this.snapshot.sending || this.snapshot.running) throw new Error('Wait for the current response to finish.')
+    await this.director.prepareChatContext()
+    if (this.director.getSnapshot().project?.sessionId !== project?.sessionId) throw new Error('The chat session changed during upload')
+    const registry = this.attachments()
+    const selected = registry.getSnapshot().filter(item => !item.sent || text.includes(item.alias))
+    const prepared = await registry.prepare(selected)
+    if (this.director.getSnapshot().project?.sessionId !== project?.sessionId) throw new Error('The chat session changed during upload')
+    // Only explicitly used/new images enter this turn; other media stays on the Host.
+    const images = prepared.filter(item => item.kind === 'image' && item.file && item.file.size <= 8 * 1024 * 1024).map(item => item.file!)
+    const references = prepared.map(({ alias, kind, name, nodeId }) => ({ alias, kind, name, nodeId }))
+    await this.send(text || references.map(item => item.alias).join(' '), images, JSON.stringify({ attachments: references }))
+    await registry.markSent(prepared)
+  }
+
+  send = async (text: string, images: readonly File[] = [], attachmentContext = ''): Promise<void> => {
     const sessionId = this.snapshot.sessionId
-    if (!sessionId || this.snapshot.sending || this.snapshot.running) return
+    if (!sessionId) throw new Error('Select a workflow first.')
+    if (this.snapshot.sending || this.snapshot.running) throw new Error('Wait for the current response to finish.')
     const generation = this.generation
-    const context = this.director.currentContext()
+    const projectId = this.snapshot.projectId
+    const context = this.director.currentContext() + (attachmentContext ? `\n${attachmentContext}` : '')
     this.dismissedError = null
     this.publish({ sending: true, error: null })
     try {
       const encoded = await Promise.all(images.map(encodeImage))
-      await this.rpc('start', { sessionId, text, context, images: encoded })
+      if (generation !== this.generation || this.disposed) throw new Error('The chat session changed during upload')
+      await this.rpc('start', { sessionId, projectId, text, context, images: encoded })
       if (generation === this.generation) await this.refresh(generation)
     } catch (error) {
       if (generation === this.generation) this.publish({ error: (error as Error).message })
@@ -131,5 +166,5 @@ export class ProjectChatSource {
     await this.refresh(this.generation)
   }
   clearError = (): void => { this.dismissedError = this.snapshot.error; this.publish({ error: null }) }
-  dispose = (): void => { this.disposed = true; this.generation++; clearTimeout(this.timer); this.release(); this.listeners.clear() }
+  dispose = (): void => { this.disposed = true; this.generation++; clearTimeout(this.timer); this.release(); for (const registry of this.attachmentRegistries.values()) registry.dispose(); this.attachmentRegistries.clear(); this.listeners.clear() }
 }

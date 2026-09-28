@@ -46,7 +46,7 @@ MiniMax-H3 Drama 是一套 **Codex 优先的视频与原生音频制作插件**�
   <img src="docs/canvas/canvas-demo.png" alt="Codex Drama 画布连接草图、图像、文本和视频工作流" width="100%">
 </p>
 
-<p align="center"><strong><a href="plugins/canvas/">[NEW] 画布驱动的可视化工作流。</a></strong></p>
+<p align="center"><strong><a href="plugins/canvas/">[NEW] 通过“$canvas:canvas-adviser run canvas”运行画布驱动的可视化工作流。</a></strong></p>
 
 ## 🚀 快速开始
 
@@ -176,7 +176,7 @@ Qwen 技能仅支持显式调用。使用 `$qwen-image-edit` 运行编辑，或�
 
 ## 🧩 Canvas 工作流伴侣
 
-独立的 [`canvas`](plugins/canvas/README.md) 插件把 DeepSeek-Harness-Video-Director 的网页画布迁移到 `plugins/canvas/` 目录，无需 DeepSeek Harness 即可运行。TEXT WORKFLOW 和 IMAGE WORKFLOW 默认选择 **Codex Plan**，视频与音频使用 ComfyUI。每个工程保留画布、素材、任务历史与独立的 Codex 咨询对话。Codex 模型及变体从本机已登录的 CLI 同步，并使用各模型的默认推理强度；快速模式（优先处理）仅在设置中提供，默认关闭。
+独立的 [`canvas`](plugins/canvas/README.md) 插件把 DeepSeek-Harness-Video-Director 的网页画布迁移到 `plugins/canvas/` 目录，无需 DeepSeek Harness 即可运行。TEXT WORKFLOW 和 IMAGE WORKFLOW 默认选择 **Codex Plan**，视频与音频使用 ComfyUI。每个工程保留画布、素材、任务历史与独立的 Codex 对话，可通过限定工程范围的画布工具查询并修改工作流。Canvas 0.5.0 新增多模态聊天引用、素材和任务分页、连接设置自动保存。Codex 模型及变体从本机已登录的 CLI 同步，并使用各模型的默认推理强度；快速模式（优先处理）仅在设置中提供，默认关闭。
 
 使用 `$canvas-adviser` 检查环境、安装锁定版本的 Node 依赖、启动服务并学习使用画布。开发时运行 `node plugins/canvas/scripts/setup.mjs`，再运行 `npm start --prefix plugins/canvas`，打开 `http://127.0.0.1:8765`。未发布版本的本地市场安装、持久化目录与后端配置见 [Canvas 说明](plugins/canvas/README.md)。
 

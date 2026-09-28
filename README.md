@@ -46,7 +46,7 @@ MiniMax-H3 Drama is a **Codex-first video and native-audio production plugin**, 
   <img src="docs/canvas/canvas-demo.png" alt="Codex Drama canvas connecting sketch, image, text, and video workflows" width="100%">
 </p>
 
-<p align="center"><strong><a href="plugins/canvas/">[NEW] Canvas-driven visual workflow.</a></strong></p>
+<p align="center"><strong><a href="plugins/canvas/">[NEW] Run canvas-driven visual workflow through "$canvas:canvas-adviser run canvas".</a></strong></p>
 
 ## 🚀 Quick start
 
@@ -178,7 +178,7 @@ The Qwen skill is explicit-only. Invoke `$qwen-image-edit` to run an edit, or `$
 
 ## 🧩 Canvas workflow companion
 
-The separate [`canvas`](plugins/canvas/README.md) plugin runs a local web canvas migrated from DeepSeek-Harness-Video-Director. All engine sources live under `plugins/canvas/`; it runs without DeepSeek Harness. Text and image vd-workflow nodes default to **Codex Plan**, while video and audio use ComfyUI. Projects retain their canvas, media, job history, and a separate Codex adviser conversation. Codex models and variants sync from the signed-in CLI and use their default effort; optional Fast (priority) is available only in Settings and starts off.
+The separate [`canvas`](plugins/canvas/README.md) plugin runs a local web canvas migrated from DeepSeek-Harness-Video-Director. All engine sources live under `plugins/canvas/`; it runs without DeepSeek Harness. Text and image vd-workflow nodes default to **Codex Plan**, while video and audio use ComfyUI. Projects retain their canvas, media, job history, and a separate Codex conversation that can query and edit the workflow through scoped canvas tools. Canvas 0.5.0 adds multimodal chat references, paged assets/tasks, and provider autosave. Codex models and variants sync from the signed-in CLI and use their default effort; optional Fast (priority) is available only in Settings and starts off.
 
 Use `$canvas-adviser` to check prerequisites, install the locked Node dependencies, launch the server, and learn the canvas controls. For development, run `node plugins/canvas/scripts/setup.mjs`, then `npm start --prefix plugins/canvas`, and open `http://127.0.0.1:8765`. The [Canvas README](plugins/canvas/README.md) covers local marketplace installation before publication, persistent storage, provider configuration, and usage.
 

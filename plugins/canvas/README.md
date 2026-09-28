@@ -2,7 +2,7 @@
 
 A local web canvas for planning and running video-production workflows. The engine is migrated from [chiphoton/DeepSeek-Harness-Video-Director](https://github.com/chiphoton/DeepSeek-Harness-Video-Director) (`dsh-video-director`) into this self-contained `plugins/canvas/` directory. It runs without DeepSeek Harness.
 
-Canvas **0.4.0** follows the upstream release version and syncs v0.4.0 from the `uncensored` branch: a persistent server-owned workflow queue, Batch Input/Output, project folders, media editing, reusable assets, and an updated Tasks panel. See the [sync record](docs/upstream-sync.md) for the exact source commit and Codex adaptations.
+Canvas **0.5.0** syncs the upstream v0.4.1 and v0.5.0 commits from `uncensored`: lighter media previews and polling, paged assets and tasks, provider autosave/model inventories, and a Codex chat that can query and edit workflows with multimodal references. See the [sync record](docs/upstream-sync.md) for the exact source commit and Codex adaptations.
 
 **TEXT WORKFLOW** and **IMAGE WORKFLOW** default to **Codex Plan**, using the locally installed Codex CLI and its existing sign-in through the official Codex SDK. The model list is discovered from the signed-in CLI, including available variants. New selections use its reported default model and each model’s default reasoning effort. Existing projects retain their explicit provider and model selections. Video and audio use ComfyUI by default.
 
@@ -19,7 +19,7 @@ npm run doctor
 npm start
 ```
 
-Open **http://127.0.0.1:8765** in a browser or a Codex browser panel. `setup` installs the locked npm dependencies and builds the client. It does not install system packages, download model weights, alter Codex credentials, or start ComfyUI. If `codex` is absent from PATH, set `CANVAS_CODEX_PATH` to its executable. Use `codex login` interactively when needed.
+Open **http://127.0.0.1:8765** in a browser. When asked to run Canvas, Codex opens it in its in-app browser and expands the panel to the maximum available width by default. `setup` installs the locked npm dependencies and builds the client. It does not install system packages, download model weights, alter Codex credentials, or start ComfyUI. If `codex` is absent from PATH, set `CANVAS_CODEX_PATH` to its executable. Use `codex login` interactively when needed.
 
 Start the server in a normal terminal. When starting it from a Codex task, use an approved launch outside the task sandbox if `doctor` reports restricted runtime access. Codex needs access to its own local state and app server. An inherited task sandbox can prevent this despite a valid sign-in. If that happens, restart Canvas through the approved launch path with the same data directory; `/health` should report `codexRuntime.ok: true`.
 
@@ -70,9 +70,13 @@ Image, audio, and video inputs start empty and accept dropped files, **Replace**
 
 Audio previews add a seekable waveform. Video and audio inspection open a **Media Editor** for trimming; video also supports crop presets and frame export. **Export** downloads a rendered copy, **Save** replaces the selected reference, and **Save a copy** adds a new output. Original stored media stays intact. These edits require `ffmpeg` and `ffprobe` on the Canvas host. Video Trim, Video Crop, and Extract Frame nodes also run locally through the workflow queue.
 
+**Tasks** loads the newest ten grouped records and appends ten at a time. Pages stay in memory per filter until the tab reloads. The asset chooser searches on the server and loads fifteen results per page. Offscreen video thumbnails release their media resources, and numeric fields commit on blur or Enter.
+
 Running nodes display their stage or progress, then completion time and duration; queue wait is excluded from new job durations. Fresh outputs reopen cleared Preview chains without replaying cleared historical results or replacing frozen references.
 
-The separate Codex adviser panel receives the current graph as context. It has its own resumable SDK conversation per Canvas project and provides advice; it does not directly edit the graph. It shares authentication with Codex, not the desktop task's conversation. Use workflow nodes for text/image generation, and the installed Drama skills in Codex for complete productions and finishing.
+The Codex chat panel has its own resumable SDK conversation per Canvas project. It receives a compact summary and can query, edit, validate, run, inspect, and save the linked workflow through the `vd_canvas` tool. Images, audio, video, folders, and nodes can be attached as persistent aliases. Double-click a node title or use **Add to Chat References**; click an attachment tile to insert its alias. Only explicitly attached small images are sent directly for vision; other content is queried as needed. Audio transcription requires a configured speech provider.
+
+Browser drafts are flushed before sending canvas instructions. Concurrent edits compare a separate draft revision; conflicts offer **Export local draft** and **Use Host version**. The chat and accepted workflow runs continue on the server after a browser tab closes. Each active Codex turn has a temporary, authenticated MCP connection scoped to its project and conversation. It shares Codex sign-in, while keeping its own conversation separate from the desktop task.
 
 ## Providers and storage
 
@@ -88,11 +92,11 @@ The separate Codex adviser panel receives the current graph as context. It has i
 | `OPENAI_MODEL` / `OPENAI_IMAGE_MODEL` | Optional API model overrides |
 | `CANVAS_MINIMAX_H3_LICENSE_ACCEPTED` | Inherited `true`; set `false` to lock H3 generation |
 
-**Settings → Connections → Codex Plan → Refresh models** queries the local CLI’s `app-server` `model/list` method, following all pages and excluding hidden entries. Text nodes, image nodes, and adviser chat share this catalog; image workflows and text nodes with image references exclude models that report text-only input. Models also refresh when Canvas loads and when a generation needs a catalog older than five minutes. The last successful list is stored in `codex-models.json` in the data folder for offline use; refresh failures are shown and never replaced with a built-in list. If a saved model is no longer available, choose another explicitly.
+**Settings → Connections → Codex Plan → Refresh** queries the local CLI’s `app-server` `model/list` method, following all pages and excluding hidden entries. Text nodes, image nodes, and Canvas chat share this catalog; image workflows and text nodes with image references exclude models that report text-only input. Models also refresh when Canvas loads and when a generation needs a catalog older than five minutes. The last successful list is stored in `codex-models.json` in the data folder for offline use; refresh failures are shown and never replaced with a built-in list. If a saved model is no longer available, choose another explicitly.
 
 **Fast (priority)** appears only in **Settings → Connections → Codex Plan**, defaults **off**, and is remembered with connection settings. It applies to supporting models across text/image nodes and chat, with increased usage; other models keep Standard speed. Canvas explicitly overrides a personal Codex Fast default when this switch is off. Reasoning effort always follows the selected model’s catalog default, without a separate control.
 
-Provider overrides entered in **Settings → Connections** are saved in `provider-settings.json` under the data directory with owner-only permissions. They override environment defaults. Secrets are stored locally in that file and never returned in the provider catalog. Keep the data directory outside the installed plugin cache so upgrades preserve projects, jobs, media, and conversations. Back up the entire data directory or export individual projects. Assets are organized under `assets/inputs/`, `assets/inputs/sketch/`, `assets/inputs/mask/`, and `assets/outputs/`. On first launch, legacy flat asset files are migrated with hash verification and a recovery journal; project asset IDs and URLs remain stable.
+Provider URL/key edits in **Settings → Connections** save on blur or Enter; the Fast toggle saves immediately. **Refresh** checks the connection and reloads models. Ollama and ComfyUI also offer **Unload Models**; ComfyUI inventory is grouped by checkpoints, diffusion models, LoRAs, and VAE. Provider overrides are saved in `provider-settings.json` under the data directory with owner-only permissions. They override environment defaults. Secrets are stored locally in that file and never returned in the provider catalog. Keep the data directory outside the installed plugin cache so upgrades preserve projects, jobs, media, and conversations. Back up the entire data directory or export individual projects. Assets are organized under `assets/inputs/`, `assets/inputs/sketch/`, `assets/inputs/mask/`, and `assets/outputs/`. On first launch, legacy flat asset files are migrated with hash verification and a recovery journal; project asset IDs and URLs remain stable.
 
 **Settings → Language** switches the interface between English and Chinese immediately. The preference is remembered in the current browser; the browser language is used initially. Project names, prompts, and generated content stay as written.
 

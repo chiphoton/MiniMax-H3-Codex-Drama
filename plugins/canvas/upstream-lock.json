@@ -1,11 +1,11 @@
 {
   "sourceRepository": "https://github.com/chiphoton/DeepSeek-Harness-Video-Director",
   "sourcePackage": "dsh-video-director",
-  "sourceVersion": "0.5.0",
-  "sourceCommit": "dd33d909d21d4c525d2682af0254fb928ad4441c",
-  "previousSourceCommit": "4964977426229c2760cf519197b40a0ec6181825",
+  "sourceVersion": "0.6.0",
+  "sourceCommit": "e17c2308666e595b09f094bd63615acaf3bdd00a",
+  "previousSourceCommit": "dd33d909d21d4c525d2682af0254fb928ad4441c",
   "license": "MIT",
-  "note": "Upstream SHA-256 hashes at the uncensored v0.5.0 sync, including v0.4.1. Files may contain Codex host adaptations; see docs/upstream-sync.md. Harness entry points and packaging are excluded; chat transport/tool registration use standalone Codex adapters.",
+  "note": "Upstream SHA-256 hashes at the uncensored v0.6.0 sync. Adapted files intentionally differ. DSH rc.2 hosting, model settings and packaging are excluded; Codex SDK/MCP, account catalog, local sessions and plugin packaging are retained. See docs/upstream-sync.md.",
   "files": [
     {
       "path": "LICENSE",
@@ -56,6 +56,10 @@
       "sha256": "7cc5a9b8a37831d1188afc5ac74cb53cddb9babf678c2c5e33c8341a2b9b01ef"
     },
     {
+      "path": "docs/agent-workspace.md",
+      "sha256": "49b647b54f68e66be4edb27c0cdf241be4389dca5ad4aa794ab692e90d9dc802"
+    },
+    {
       "path": "docs/batch-processing.md",
       "sha256": "193a3b089d59cf5a2f3565a63b46c94b0418063be91d2f5cf193714db720df06"
     },
@@ -81,11 +85,35 @@
     },
     {
       "path": "scripts/debug/media-preview.mjs",
-      "sha256": "4356e396d2dc13e36b333ff9dcbbd559d46018bf84fb0405875edc5244a269dd"
+      "sha256": "fed8afbd6bb9fb122687d24834c2d056a5107fc3d6c6c183166d1750597a838f"
     },
     {
       "path": "scripts/debug/sidebar-chat.mjs",
-      "sha256": "cac4cdc6a98ccc3aaf7e857dfbf243e795ab3d26aaadb76f489360b3f351c037"
+      "sha256": "20a12fa37ca9b1e599dae4b39be5b33dd1e1bd26e2c46617925c15f55b1e03e4"
+    },
+    {
+      "path": "skills/canvas-builder/SKILL.md",
+      "sha256": "7e2f5a90c7beb32e0fc00b2d2d68e82fffda262f1abb6ca8479f1dbca08d81cb"
+    },
+    {
+      "path": "skills/canvas-builder/references/few-shot.md",
+      "sha256": "01dbf2ccdf8bbe4c88f934d4c7022a5835f77422ae10df09c65a5cecf1189196"
+    },
+    {
+      "path": "skills/canvas-builder/references/sketch-to-video-review.md",
+      "sha256": "f2f08c5fbc33aa84d220e17581a552a3a1b680929692cc5dd1dd36147b76a78c"
+    },
+    {
+      "path": "skills/layout-optimizer/SKILL.md",
+      "sha256": "9da849aa4926b85e6c715525bab7ff1db7eff62700361d6aca82eb98d0023636"
+    },
+    {
+      "path": "skills/sketch-to-h3/SKILL.md",
+      "sha256": "3b66d8302647bdb0c97d88e89c0ce803c1e9666b832d0be4221a36daf67e3a86"
+    },
+    {
+      "path": "src/agent-tool-parameters.js",
+      "sha256": "66dd59b42a4850ac1efbf63235a264ed3b95eaeac9b639917a7f978085a4c60f"
     },
     {
       "path": "src/asset-layout.js",
@@ -96,24 +124,40 @@
       "sha256": "1ef9ed5898d5bd4e3df158f174c35561c5765515986980f81a1354de29864f99"
     },
     {
+      "path": "src/bounded-results.js",
+      "sha256": "81c7bd11538813981321e4924f2ab58b446ccfa7e05df4569bb754916187d5bf"
+    },
+    {
       "path": "src/canvas-agent.js",
-      "sha256": "82d40467b646b473d971a111ebe06e184fbcbcbe8a7cf32799586d6b6ffb98f2"
+      "sha256": "83463a98ce7d4b1d45249f2c93035b23c0ccd41e3d5989728820587b1c70def6"
+    },
+    {
+      "path": "src/canvas-history.js",
+      "sha256": "721f3364a6108a080e8cf399d88090c6228e13143d2fcb037110a57e9fedf8b5"
+    },
+    {
+      "path": "src/canvas-layout.js",
+      "sha256": "6c561dd538dc966bc1db1641d077f6923aac3c90a919391a947a71e76a419b44"
+    },
+    {
+      "path": "src/canvas-recipes.js",
+      "sha256": "9cbcda773ddace276810bda74ef1c337b3013481794040fb7a4beed6745875f4"
     },
     {
       "path": "src/chat-references.js",
-      "sha256": "71f841ca98f8b93aaca7c92c062376d5bbdc1ed9b120aa53e18c18b9c5a85841"
+      "sha256": "1ff2d99a7d5dcb9ef3190ad7ddcfc2b8c0fc06a54a0eed523b1d7b2e5ef1a118"
     },
     {
       "path": "src/client/App.tsx",
-      "sha256": "1fd036dfd24c0c91d2d0b81c7410022317f690b40de495169827d5a7315209c3"
+      "sha256": "ab4f54ad05a74543cbc7a307af0249f2f5102df15f02fe286a25b8065bfe81b6"
     },
     {
       "path": "src/client/ArtifactGallery.tsx",
-      "sha256": "28eccbd76eab7f890dde650b29f85b1eab3bcc033a5143a72464bd0d27d2d88d"
+      "sha256": "e32eae5cddb54c8dd640cb9843080b42d6107357ec0b7f8f26295790b797095e"
     },
     {
       "path": "src/client/ArtifactPreview.tsx",
-      "sha256": "0a44709ae52bb758158ff67388b5c5a723b1daf762c33ad1a8c16196edaf8eda"
+      "sha256": "72aaabc7408d020e23b1c3331d97566660dbf950b81d266a2e9ac92efdd32d2d"
     },
     {
       "path": "src/client/AssetPicker.tsx",
@@ -132,12 +176,24 @@
       "sha256": "1dfc7cb7acda9a2abe3908e107447b44c69ffb84d8b1b43f1ab9ac6a28a29c90"
     },
     {
+      "path": "src/client/ChatMarkdown.tsx",
+      "sha256": "b92694d365ce8097588f9f3b946ae0950fe0d38b3c444c6174bdcf58ee1cf13c"
+    },
+    {
       "path": "src/client/ChatPromptEditor.tsx",
-      "sha256": "2bee8657c7c53af1d63778ac40025de522a92cffb5f982afc8761b41851b50a0"
+      "sha256": "0644f1fb8d12b4e3b445c1022eb6bd8075b1bb6ca8e1976e88bb2251d2204c7d"
+    },
+    {
+      "path": "src/client/ChatSkillComposer.tsx",
+      "sha256": "5f873b9aec0f3164f84ca85ea9f8f1b9b43194c166a76313de379bbcd98c884e"
+    },
+    {
+      "path": "src/client/ChatTranscript.tsx",
+      "sha256": "065a4666db49ae4657d1082c9d2366a6e94bcabb6289a2649d690be631fda995"
     },
     {
       "path": "src/client/DirectorNode.tsx",
-      "sha256": "2bc047ae96086ae2f77613c9bf6977e9d18cc5766055c2c4a411235dfa5818cd"
+      "sha256": "32d17f174022ac7071534ee607a3f14bee8cf89e50e2c169bfc5e743ad21be5c"
     },
     {
       "path": "src/client/FolderDestinationTree.tsx",
@@ -181,7 +237,7 @@
     },
     {
       "path": "src/client/ProviderConnections.tsx",
-      "sha256": "a81e0ed816c9bd371b8bc7bb46e5b413a3f02fc7da9bddd2c06f6819261ae744"
+      "sha256": "9b3eb67ff44c9a28764b2afeb816a792d8c22a8c03de38ef192183d621e40747"
     },
     {
       "path": "src/client/SettingsDrawer.tsx",
@@ -200,6 +256,10 @@
       "sha256": "416f8aec4565a3bace0843e3f03b3ef07843392e336dcfb67d4aa23c6aa747de"
     },
     {
+      "path": "src/client/WorkspacePanel.tsx",
+      "sha256": "525550ade826d12aa729de3bb68c1cb81468987cd294997257bd1e1dc6cae3e7"
+    },
+    {
       "path": "src/client/audio-waveform.ts",
       "sha256": "61fb3c38c8f32089026aad11b22a784a19e789c2bf17d3b6e20181180098fe15"
     },
@@ -213,7 +273,7 @@
     },
     {
       "path": "src/client/canvas-commands.ts",
-      "sha256": "29eb19338f6e9247707921f4ba2990241c8f13c4774d337e95fc3298b9100d30"
+      "sha256": "2686e12062f2dfadaaf2357d6f4f21786d735928b95a4a170d4a56683061cff4"
     },
     {
       "path": "src/client/canvas-controls.tsx",
@@ -221,15 +281,19 @@
     },
     {
       "path": "src/client/chat-attachments.ts",
-      "sha256": "ba5f1bb2fb88c7717df3b6060f8e40330a432dec86d0b972c4ba98953b7b62bd"
+      "sha256": "aaa798e5871dfb7b31318774839e025a2ac448dd0147856265f041bcabd5a443"
+    },
+    {
+      "path": "src/client/chat-skills.ts",
+      "sha256": "330baf518d2631be867c92302f0b2f66bd7f129a87a3180a2f91461a235d0f59"
     },
     {
       "path": "src/client/chat-source.ts",
-      "sha256": "9fc6997878fc4bea0aa47d5e223a903e632ada70719149a5bc147a90172c960b"
+      "sha256": "962875cd824f03411fcf9248aa9e2d27c0282cff6c3b503e8b090b586f373e59"
     },
     {
       "path": "src/client/controller.ts",
-      "sha256": "72c97db3650b751c9bad6f75571e56bbec30f25fe10b718a0b2c6b15cfc9734c"
+      "sha256": "6b5d5c855fcfeefee090588209b1ce3248a4857fe6a50b8269d7d294955c2d67"
     },
     {
       "path": "src/client/css.d.ts",
@@ -249,7 +313,7 @@
     },
     {
       "path": "src/client/host-execution.ts",
-      "sha256": "1f95eb1ea71d63e247792d822712c50807a8734367517aa0ed4602f123031830"
+      "sha256": "484b6151bae3493dbf5594c9f1e5bd3267549f10da252898e901305867db2687"
     },
     {
       "path": "src/client/i18n.ts",
@@ -272,6 +336,10 @@
       "sha256": "380f592809bfa7754fed7881692130df9a0b6dcf881c5c564b1193dd4e34bce4"
     },
     {
+      "path": "src/client/index.tsx",
+      "sha256": "3c2faa17d3c9f8663f3bf333677cd223348bfe3c8f2bec22a61ac748fa72f9d9"
+    },
+    {
       "path": "src/client/input-files.ts",
       "sha256": "a1e36fba27c8379bcde6dc22b86d28112783079c7c30f7b1285127dc1633bce9"
     },
@@ -289,7 +357,7 @@
     },
     {
       "path": "src/client/messages.ts",
-      "sha256": "535cd2a12be16470fe067a400bc54d2f798493d45f7996e45e24feab1b7d607b"
+      "sha256": "9a97bfb28bbe43d6e8f19bd9941ff24b2b02c95f5fd503e3f906a56120d592ff"
     },
     {
       "path": "src/client/modal-scroll-lock.ts",
@@ -317,7 +385,7 @@
     },
     {
       "path": "src/client/ports.ts",
-      "sha256": "163751328f83ad44ebbe871447611ce3ef10408e857ffdc191b70ab197e8c891"
+      "sha256": "23ce760150e8614d15ea0942d4791dd6701441b67a793cab10bd330aadc11a0d"
     },
     {
       "path": "src/client/project-drafts.ts",
@@ -341,11 +409,11 @@
     },
     {
       "path": "src/client/styles.css",
-      "sha256": "06268abe0cc1c048ac5c413d1ac9899f4a383779212cc5cfcbc1488adc2677c9"
+      "sha256": "5b153cf7ab9687d0a2b4c159462a397c34c3a79e3f736fe717873492df96f0a2"
     },
     {
       "path": "src/client/types.ts",
-      "sha256": "a4976e78969866638fd838b5f663333a8e1d0e6c13c12ca7bb0ab889aa81d4e8"
+      "sha256": "024aacd81749f4bdd71f0432f53ab3b22f4503f1c7ee16cbf1b21482b031b272"
     },
     {
       "path": "src/client/use-input-file-drop.ts",
@@ -353,7 +421,7 @@
     },
     {
       "path": "src/client/workflow-runner.ts",
-      "sha256": "7b36f10595913c0bd0f568bffe4a8b8c0d687b9c6b93caaaca8103410b0d9a60"
+      "sha256": "3d3732a0e91e8fd8a1c2e1d00bdae8d6b11ef09032b54e13545e6c26dab01ed8"
     },
     {
       "path": "src/codex-client.js",
@@ -369,7 +437,7 @@
     },
     {
       "path": "src/codex-model-catalog.js",
-      "sha256": "1ba8125c979291d13c33a61b7e9af20bcb2dc271fbf9e0d9b50b5d8ce00b648b"
+      "sha256": "69bb51f4bde964cd142e01dc94e0c42fd11987f93738c5192b5833267585b670"
     },
     {
       "path": "src/codex-plan-provider.js",
@@ -389,7 +457,11 @@
     },
     {
       "path": "src/jobs.js",
-      "sha256": "821ef3e99dfa5a526cc204e467d59ee9adc7c4dd1725370ac73f4601b4bc9a4f"
+      "sha256": "79cc42a46830c3e6b3f7f53c634d2112b01fcf1f646aad2e3befdf8a3d4dcb9a"
+    },
+    {
+      "path": "src/library-agent.js",
+      "sha256": "7707fb7a504ceef55d57dbe33579fbab59e4c7dcae3bb6dc73d90b7efe115870"
     },
     {
       "path": "src/media-editor.js",
@@ -397,7 +469,7 @@
     },
     {
       "path": "src/node-registry.js",
-      "sha256": "cfea6079643e3cac001d4800fbef1f9bd1037d0495b0c198abd81a513e6fa6b5"
+      "sha256": "3e9d94b7d1ba28f8517bba5f638c087bc04bf2cb7e2122d46237e32e0d8ba19b"
     },
     {
       "path": "src/project-folders.js",
@@ -405,19 +477,27 @@
     },
     {
       "path": "src/project-store.js",
-      "sha256": "0131cea16ab30a13b2bc2827df181a77302d904821234615214f29efbd2cde3b"
+      "sha256": "464433cb858db207268a9b9b76c6531b2e097d6374b080aea0c138d03e2cbbdd"
     },
     {
       "path": "src/provider-settings.js",
-      "sha256": "42d2c27c42c9ba349179d663f763ad67d1fb995784612ac15a4554f783d10649"
+      "sha256": "5c55b436b66d73e9c3bf1f6fcad9cd0cab0709792fd06863eb6e67080344b82d"
     },
     {
       "path": "src/providers.js",
-      "sha256": "0f1101f9a2c3efd5730011cf51c8ab30e402318ec553175e086b0679a8b63506"
+      "sha256": "bf75815de25399e392c76a18e83068f0711400d87c3c97e48679b5e1789a6d7a"
+    },
+    {
+      "path": "src/quality-agent.js",
+      "sha256": "16d24f3f07ba02dd247d7e00046e3c392c7cd92a62e5b60ff77de3ccc2e72a10"
+    },
+    {
+      "path": "src/quality-loop.js",
+      "sha256": "9973c2ad8e4eb8ea5922104e6a4daaad89dfa741a87b52ce01d0a548797905e6"
     },
     {
       "path": "src/rpc.js",
-      "sha256": "e1240f96e032910c000d2b1df3b07f72de31bf5f730b73fd7e6c8a0cb9250f8b"
+      "sha256": "2446ddf97ef260920a3e27a51bc0825ba5b77ad3a26193b03959694702817821"
     },
     {
       "path": "src/run-queue.js",
@@ -432,20 +512,44 @@
       "sha256": "333a4b82884a4c642e2e1322dccf5bed1a28435bb522d72a6b8225580d761c55"
     },
     {
+      "path": "src/video-contact-sheet.js",
+      "sha256": "b95cdd1e21aefb151e8acb09431b34ec5e65c7ffaac86502becc6370ba9d4524"
+    },
+    {
       "path": "src/video-properties.js",
       "sha256": "a94f717cd3bc1cb6110e1e168dc02a9e61883af859152a6dc20caae70d2f5ae5"
     },
     {
       "path": "src/workflow-scheduler.js",
-      "sha256": "f5f82ec7c381ebd8f7e47629ad9a815f7b38cbe4689c009f041fb872bedaef73"
+      "sha256": "b7bae9049cb4144cbb648db3a735a4c91c2700d472650bb113746cfc8563c8f0"
     },
     {
       "path": "src/workflow-store.js",
       "sha256": "774bf53a36e048303fb367100e61ace6824a46fa05faa3e8d6cc609301ce0a88"
     },
     {
+      "path": "src/workspace-agent.js",
+      "sha256": "1a181ff486447d77323019b4d4f51262de6fd2d56050d966d776e85b0607ca4f"
+    },
+    {
+      "path": "src/workspace-files.js",
+      "sha256": "4b685cae3aee30c82178583560494ad9c375b16fbbafa50d78820ba3039dc19e"
+    },
+    {
+      "path": "src/workspace-library.js",
+      "sha256": "501665611bbf5bc68da7a65f922b08c227672b3829847d9dda5de732e2dfe69f"
+    },
+    {
+      "path": "src/workspace-operations.js",
+      "sha256": "b15524018e8531e3e05beee95a60d98dfd4b167cfb12a9d5f29654d026337a22"
+    },
+    {
+      "path": "test/agent-workspace.test.js",
+      "sha256": "3344d45328243eea9e366a74226fd9b107a012dcc205de34a04909b21cc1943d"
+    },
+    {
       "path": "test/artifact-gallery.test.js",
-      "sha256": "97320565363c3974175447eb9323f05cef3abe2b67973aae7d9ecaf37577fb77"
+      "sha256": "1c5d33e542626250a0be6b1b185285772f3605c6e3250493df6a49b3616afc5f"
     },
     {
       "path": "test/artifact-preview.test.js",
@@ -469,15 +573,23 @@
     },
     {
       "path": "test/batch-processing.test.js",
-      "sha256": "efb624171587033b673f0d4148ca98fd48e2b75f15e2d37db0a2c38edfa1fa08"
+      "sha256": "eff73a96ad731190055537cca052c50491abea9703e06c7afc56938a68365361"
     },
     {
       "path": "test/canvas-agent.test.js",
-      "sha256": "226a6c9434d38bfc80a8ce924e5a2efc452986eb653fae2ae3bce183d78db452"
+      "sha256": "c916d3308ae34b5607ed248dee6d4d03db506827679fdc9a535786665df161ae"
     },
     {
       "path": "test/chat-composer.test.js",
       "sha256": "9ddc713c47666e13a5886bb10f334b3904d68914cfa088aeb0fd54fb593cd474"
+    },
+    {
+      "path": "test/chat-skills.test.js",
+      "sha256": "230c6f21e0f3750ffc90be2577db7ef15d83d60999ea976926b9b70fce03b030"
+    },
+    {
+      "path": "test/chat-transcript.test.js",
+      "sha256": "9e3f64f895a0b9a2f1845f5892fe049396ddbc10c511f60710771a7afc757e4e"
     },
     {
       "path": "test/client-model-choices.test.js",
@@ -509,11 +621,11 @@
     },
     {
       "path": "test/controller-session.test.js",
-      "sha256": "ad741c3c519f23ec982c12ca9afaccffa9c115ab09f69c4079df288b3a70973c"
+      "sha256": "15a94ae6257434cee1d1b16eddd9cba37d02f02d4a787606317fec3cfacdc2d6"
     },
     {
       "path": "test/example-projects.test.js",
-      "sha256": "d1087c2e7bcaeec837b0965d39a344029043779072f6c5c45c088dbf47e0f215"
+      "sha256": "bf6f0821a1e38a010a15f705e1d148a58f3efc3be6414a4abbb49433e40030af"
     },
     {
       "path": "test/fixtures/codex-models.js",
@@ -529,7 +641,7 @@
     },
     {
       "path": "test/global-workflows.test.js",
-      "sha256": "d5600443db795e730e1e3b51b41e2b8ce5a8fb1565c19e270c580b8696aadbea"
+      "sha256": "701a6ac3dcace6c67fe58d995e3df694d52a0aa6be9fd53d3a176a4a2be38a50"
     },
     {
       "path": "test/image-properties.test.js",
@@ -545,15 +657,15 @@
     },
     {
       "path": "test/job-drawer.test.js",
-      "sha256": "77277f846a4b53785692c54852b41d500bb9af880a56520df1002ee9446accd7"
+      "sha256": "41728e74608f95ec969ab8a978ccb985240744e5ea5c7430f2bdc0a0afe2e3f0"
     },
     {
       "path": "test/job-history.test.js",
-      "sha256": "7a9d377d653674c0036127ae5572bf17c5f44823c4534fe09e6b5c8147e1cd73"
+      "sha256": "a1119aae186397444c2b120a44fef86114f63e5cfaab0d218d745dd099670895"
     },
     {
       "path": "test/jobs-rpc.test.js",
-      "sha256": "b9f8e990e2e624214f5d0751a3971af99069b03c18e78edc97beb4e64afc88e8"
+      "sha256": "9b42bd9da2fd5d5cd88250486a03f2b009fea2ff40cf4912248473bfd5f0b5d9"
     },
     {
       "path": "test/language.test.js",
@@ -581,7 +693,7 @@
     },
     {
       "path": "test/numeric-inputs.test.js",
-      "sha256": "1af7772ebf21e0cd5094b48230057d35d4ddfae93635ff12c01f2567883f9c83"
+      "sha256": "f800cbd3b8c4c604188cd4aab1d18d5661999df11f745d478ca47a2bdb95280c"
     },
     {
       "path": "test/parameter-input-picker.test.js",
@@ -589,7 +701,7 @@
     },
     {
       "path": "test/project-drafts.test.js",
-      "sha256": "1eb31acad8331ce59886310e98ea8413886784c2d4178b3879b1d55a408da078"
+      "sha256": "8225c7378cfb3eb6c2037fc396a7d0d0428ef9f23cd0662c7e07aae9d4c70f0c"
     },
     {
       "path": "test/project-folders.test.js",
@@ -625,7 +737,7 @@
     },
     {
       "path": "test/run-observation.test.js",
-      "sha256": "b54eccebd31188913a514cb30497646a69a3019ddda42b4abfcc3275f2234019"
+      "sha256": "b7535f66f51e6688e4bed2b4c7b2914c1a00ad73ccebb238b3c736e743333b46"
     },
     {
       "path": "test/sketch-document.test.js",
@@ -640,8 +752,12 @@
       "sha256": "4df20b29a09846c331e4ec658736348d414fd4f9a0e72bff174c177f6408805d"
     },
     {
+      "path": "test/video-contact-sheet.test.js",
+      "sha256": "fefba0fae38d678debf4f52fcb148d118aabcabd52aacc3c09c483cb3964cfdf"
+    },
+    {
       "path": "test/video-properties.test.js",
-      "sha256": "f27d85fc5b94cf0014c9c864664cbbc22baa1d64b5342981bf3f214f0a8ed9b2"
+      "sha256": "cdb9e1828dcfaf120f67e1104c5aedacd7c8175b3184305714ec7da1bb03bb09"
     },
     {
       "path": "test/workflow-runner.test.js",
@@ -652,6 +768,10 @@
       "sha256": "f353065a7b0e482d6018204e770acf3e1935a9c5751eff95db926266e0d0dc25"
     },
     {
+      "path": "test/workspace-panel.test.js",
+      "sha256": "88f3ba8695a361e4c69723b978376f47b4909e7ce4d29487a6eaf1270e1ab236"
+    },
+    {
       "path": "tsconfig.json",
       "sha256": "814c8333987752f186d542e777bc8139435900a611da6f9591168fe1f758d30e"
     }
@@ -659,6 +779,7 @@
   "sourceBranch": "uncensored",
   "sourceReleaseCommits": {
     "0.4.1": "a7cd2ea3e882c173c63e5d0db4260237c249fdbb",
-    "0.5.0": "dd33d909d21d4c525d2682af0254fb928ad4441c"
+    "0.5.0": "dd33d909d21d4c525d2682af0254fb928ad4441c",
+    "0.6.0": "e17c2308666e595b09f094bd63615acaf3bdd00a"
   }
 }

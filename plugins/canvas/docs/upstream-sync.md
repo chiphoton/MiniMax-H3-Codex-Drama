@@ -1,49 +1,48 @@
-# Canvas 0.5.0: upstream v0.4.1 and v0.5.0 sync
+# Canvas 0.6.0: upstream v0.6.0 sync
 
-Source: [chiphoton/DeepSeek-Harness-Video-Director](https://github.com/chiphoton/DeepSeek-Harness-Video-Director), `uncensored` branch. Canvas was previously pinned to v0.4.0 `4964977426229c2760cf519197b40a0ec6181825`. This sync includes both subsequent release commits:
+Source: [chiphoton/DeepSeek-Harness-Video-Director](https://github.com/chiphoton/DeepSeek-Harness-Video-Director), `uncensored` branch at **`e17c2308666e595b09f094bd63615acaf3bdd00a`** (`v0.6.0: added text-to-canvas agent operations`). The previous source pin was v0.5.0 `dd33d909d21d4c525d2682af0254fb928ad4441c`.
 
-| Release | Exact commit | Changes |
-|---|---|---|
-| v0.4.1 | `a7cd2ea3e882c173c63e5d0db4260237c249fdbb` | Media preview performance, shared observation, task pagination and timing, HTTP range fixes |
-| v0.5.0 | `dd33d909d21d4c525d2682af0254fb928ad4441c` | Multimodal chat references, canvas commands and draft conflicts, provider settings, asset pagination, numeric inputs |
+The intervening DSH migration commits were reviewed. Linked workflow/session title synchronization from `caeb69a8dc9de085bb92313e80300bb5280c09d4` is adapted to Canvas's local session service. DSH rc.2 registration, workspaces, model directories, credentials, packaging, and native transport remain outside this standalone Codex plugin.
 
-Canvas's npm manifest, lockfile, plugin manifest and health endpoint now report **0.5.0**. The upstream npm manifest still reports 0.1.2; the release commits identify the synchronized versions. `upstream-lock.json` records hashes of upstream originals at the exact v0.5.0 commit. Adapted files intentionally differ from those hashes.
+The npm package, lockfile, Codex plugin manifest, HTTP health response, MCP server identity, and Codex model-discovery client identity report **0.6.0**. The upstream package version `0.2.1-rc.2` describes Harness compatibility, not this release. `upstream-lock.json` records upstream SHA-256 hashes; files with Codex adaptations intentionally differ.
 
 ## Feature mapping
 
 | Upstream change | Codex integration |
 |---|---|
-| Media performance | One workflow observation loop; unchanged snapshots retain identity; elapsed clocks update separately; offscreen video thumbnails detach sources; stable media metadata effects; satisfiable byte ranges clamp to EOF and abandoned streams stop reading. |
-| Task history | `jobs/history` pages ten grouped records with a stable timestamp/ID cursor. Per-filter pages stay in controller memory until reload. Active observation is separate from historical paging; card cancellation, fixed completion durations, receipts and artifact downloads remain available. |
-| Asset chooser | Server-side text/source filtering and fifteen-result pages, independent preview/selection, lazy thumbnails and retryable loading. |
-| Chat references | Persistent Image/Audio/Video/Folder/Node aliases, token-aware editor and clipboard handling, title/context-menu node references, searchable folder preview, sequential uploads, historical alias preservation. Reservation calls are serialized before asynchronous project reads to keep concurrent numbering deterministic. |
-| Canvas agent | Shared `editVdCanvas` graph operations and `createCanvasAgent` run in the standalone server. Queries are scoped/paged; edit batches are atomic; media, validation, queue execution, cancellation and saving reuse existing services. New text/image nodes retain Codex Plan defaults. |
-| Codex transport | `CodexCanvasMcp` exposes `vd_canvas` over authenticated loopback Streamable HTTP. Each SDK turn gets a fresh project/session capability; cancellation or completion revokes it. Image results use MCP image content and the selected model's vision capability. Tool progress appears in the local transcript. |
-| Concurrent editing | A separate `draftRevision` protects browser writes, agent edits, discard and save. Send flushes browser edits. The shared observer adopts newer remote drafts only when there are no unacknowledged local changes. Conflict recovery offers an export and explicit selection of the server version. |
-| Connections | Autosave on blur/Enter, immediate Fast toggle, one refresh action, categorized ComfyUI model inventory, and Ollama/ComfyUI unloading. Keep Codex Plan naming, live account catalog, default effort and Settings-only Fast control. |
-| Numeric controls | Partial/empty numeric drafts remain editable; valid values commit on blur or Enter with bounds and integer normalization. |
+| Managed skills | Immutable versions, supporting files, import/export, duplicate, archive/restore, sharing, pinned selection, `$skill` completion, and optional automatic invocation of bundled skills. |
+| Canvas construction | Typed `plan-edit`, `ports`, asset placement, switchable H3 video presets, a sketch-to-H3 recipe, measured/fallback layout, and stage titles. |
+| Change history | Browser and agent changes have durable receipts, retry keys, Inspect, and revision-checked Undo. Existing local undo and draft-conflict recovery remain available. |
+| Workspace operations | Discoverable operation schemas, filtered provider metadata, acknowledged select/frame/zoom/inspect/preview commands, and bounded results with scoped cursors. |
+| Quality iterations | Criteria, version/model pins, job/time/iteration limits, evidence-backed perceptual reports, affected-branch reruns, best-run retention, deadline cancellation, and restart reconciliation. |
+| Media review | Host FFmpeg contact sheets with sample times; image and video preview actions attach review images without sending a message. |
+| Chat presentation | Markdown/GFM, literal skill mentions, model labels, local image previews, expandable tool activity, stop control, and refreshed composer/settings layout. |
+| Linked titles | Workflow rename, save, discard, and undo/redo synchronize their local chat title. Rename failures preserve successful graph writes and can be retried. |
 
-The original Harness `canvasTool` wrapper is replaced by the Codex MCP adapter, and native DSH chat transport remains excluded. Cordis registration, Harness entry points, dependency injection, launcher and packaging are not copied. The local HTTP host, same-origin checks, sessions, `CANVAS_*` environment settings, persistent storage migration, plugin skill, Codex image imports and cleared Preview propagation are retained. No dependency versions changed.
+## Codex hosting and model choice
 
-The SDK accepts per-instance Codex configuration overrides; its `mcp_servers.canvas` entry uses a loopback URL, a temporary authorization header, the `vd_canvas` tool allowlist and a bounded tool timeout. This follows [Codex MCP configuration](https://developers.openai.com/codex/mcp). No persistent user Codex config or plugin-wide MCP registration is necessary. The bridge overrides caller-supplied project/session identity with the owning turn's scope and rechecks the project's current binding on each command. Expired tokens fail authorization, and cross-origin requests still fail the HTTP host's existing checks.
+Chat uses the existing local Codex SDK and CLI sign-in. Its model picker lists **Codex Plan** models only. Fresh connections automatically discover the signed-in catalog; an explicit saved selection remains pinned. Reasoning effort follows the selected model's catalog default. Fast (priority) remains an optional Settings-only control, off by default. No DSH session/model service, API key, hard-coded fallback model, or alternate model backend is introduced for chat.
 
-Legacy unbound SDK conversations remain usable for advice without canvas tools. Bound chat can keep operating while its turn is active after the tab closes; this does not start autonomous new turns or install a daemon. Accepted workflow runs continue on the existing server queue.
+The chatbox's **Model settings** opens Canvas Settings → Connections. Three additional npm dependencies support the port: pinned `react-markdown` 10.1.0, `remark-gfm` 4.0.1, and `yaml` 2.9.1. The follow-up Codex integration update upgrades `@openai/codex-sdk` and its bundled CLI from 0.152.1 to **0.167.0**. React, XYFlow, and other previously locked dependency versions are retained. Canvas keeps its existing environment-based provider defaults; the API connection validation and setup hints are ported.
 
-## Upgrade and development
+`CodexCanvasMcp` exposes `vd_canvas`, `vd_library`, `vd_workspace`, and `vd_quality` over the existing authenticated loopback connection. Each turn has a temporary capability bound to one project and session. The adapters enforce `protocol: "vd/1"`, derive the owning session from that capability, reject cross-project requests, and revoke access on completion/cancellation. Native DSH attachment handling is replaced with MCP image content and conversation-scoped local transcript images. Image inspection still requires a vision-capable Codex model.
 
-Finish or cancel active work, rebuild with `node scripts/setup.mjs`, restart Canvas with the existing data directory, and reload open tabs. Reloading matters because old clients that omit draft revisions cannot protect concurrent edits. For upgrades from Canvas 0.2.0 or earlier, the existing asset-layout migration and switch to server-owned workflow execution still apply. Keep the data directory outside the plugin installation and back it up before upgrading.
+Workflow content access is off initially, as upstream specifies. Metadata queries and reversible graph edits work; reading node text/media and running providers requires enabling **Workflow access** in chat settings. Explicitly sent attachments are shared separately. The Codex turn retains its read-only sandbox, no approval escalation, and disabled network access; instructions direct it to the scoped tools rather than filesystem workarounds.
 
-`npm run check` passed: browser/shared server builds, TypeScript and all **534 tests**. `git diff --check` verifies patch formatting. New and ported coverage includes references, atomic edits, draft conflict recovery, pagination, observation stability, numeric inputs, provider autosave/inventories and Codex MCP HTTP integration. The latter uses a simulated SDK client over real loopback HTTP to verify tool discovery, edits, project isolation, stale revisions, cancellation, token expiry, vision checks and thread resumption. It does not call a paid model.
+The standalone server recovers quality journals with the persistent workflow scheduler, closes their observers on shutdown, and blocks storage relocation while a quality plan or Codex turn remains active. Existing same-origin checks, local credentials, data-directory relocation, Codex image imports, cleared-preview behavior, and archive compatibility are retained. The specialized sketch-to-H3 recipe still explicitly uses ComfyUI and Ollama; ordinary text/image nodes and chat retain Codex Plan defaults.
 
-Two synthetic browser fixtures remain available, both requiring FFmpeg:
+## Upgrade and verification
 
-```sh
-node scripts/debug/sidebar-chat.mjs
-node scripts/debug/media-preview.mjs
-```
+Finish or cancel active work, rebuild using `node scripts/setup.mjs`, restart Canvas with the existing data directory, and reload tabs. No eager project rewrite is needed: skill bindings, access settings, operation receipts, and quality journals are created as used. Keep managed data outside the plugin cache.
 
-The sidebar fixture uses the actual standalone server and local chat adapter with simulated Codex/providers; sending a message creates a synthetic Text node through MCP. The performance fixture supplies a large synthetic canvas and paged task history. Both print their temporary URL/data root and remove that data on shutdown. Neither accesses user projects or sends paid generation requests.
+**Verified November 8, 2026:** `npm run check` passed the browser/shared execution builds, TypeScript, and all **574 tests**. `git diff --check` passed. Synthetic regressions cover tool scope, content access, skill pins, bounded queries, large graphs, atomic edits/undo, quality budgets and recovery, storage moves, contact sheets, local image transcripts, model defaults, and title synchronization. These checks do not call a paid model or operate on user projects.
 
-Browser QA confirmed node-title references, chat-created nodes arriving on the canvas, provider autosave and categorized model lists, asset paging from 15 to 30 and filtered selection, and task paging from 10 to 20 with 20 retained after reopening. In the performance fixture, 40 video thumbnail elements had only 2 attached sources at the initial viewport. Neither fixture logged browser errors during these checks. These are integration checks, not a live model quality or production Safari performance benchmark. See [chat architecture](sidebar-chat-architecture-2026-09-28.md) and [media performance notes](media-preview-performance-2026-09-27.md).
+Browser QA in the disposable fixture verified `$canvas-builder` selection, a chat-created Text Input, Inspect/Undo, the managed skills dialog, the Codex-only model picker, and Model settings opening Connections. No browser warnings or errors were observed.
 
-The source checkout and existing user data were not changed. The original MIT license remains in place. The pre-existing untracked `docs/codex-sidebar-evaluation.md` was left untouched.
+For manual UI checks, `node scripts/debug/sidebar-chat.mjs` starts the standalone host with simulated Codex/providers and temporary synthetic data; Ctrl-C removes it. A live model generation is separate from these tests.
+
+The Codex SDK update also passed all 574 tests. A separate signed-in live check used GPT-6.1 Sol and the native image tool once, then imported the generated PNG through `CodexPlanImageRuntime`. See [Codex runtime verification](codex-runtime.md) for the CLI versions, image-model evidence, and limits of this check.
+
+The subsequent [live sidebar generation/editing test](sidebar-image-e2e.md) exposed three additional integration issues: noninteractive MCP approvals, undiscoverable image edit mode, and CLI item IDs reused across resumed turns. All three are corrected with regression coverage. The final build, typecheck, and **576 tests** passed; the live sidebar created and completed both image stages and retained them across restart.
+
+The upstream checkout and the pre-existing untracked `docs/codex-sidebar-evaluation.md` are unchanged. Original MIT licensing is retained in `LICENSE` and `NOTICE.md`.

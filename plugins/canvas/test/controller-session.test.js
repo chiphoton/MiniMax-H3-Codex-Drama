@@ -33,7 +33,7 @@ async function DirectorController() {
     target: 'es2022',
     write: false,
   })
-  const source = Buffer.from(result.outputFiles[0].contents).toString('base64')
+  const source = Buffer.from(result.outputFiles[0].text + '\n//# sourceURL=controller-tests.js').toString('base64')
   const BaseController = (await import(`data:text/javascript;base64,${source}`)).DirectorController
   controllerClass = class extends BaseController {
     constructor(...args) { super(...args); liveControllers.add(this) }
@@ -218,6 +218,7 @@ test('creating a project rejects a failed durable Session rename before persisti
 
 test('project export and Duplicate preserve canvas assets while resetting active runtime state', async () => {
   const Controller = await DirectorController()
+  const workspaceId = '00000000-0000-4000-8000-000000000042'
   const sourceSessionId = '00000000-0000-4000-8000-000000000043'
   const copySessionId = '00000000-0000-4000-8000-000000000044'
   const copyProjectId = '00000000-0000-4000-8000-000000000045'
@@ -283,7 +284,7 @@ test('project export and Duplicate preserve canvas assets while resetting active
     connection: {
       rpc: {
         async call(_channel, endpoint, payload) {
-          if (endpoint === 'projects/list') return { ok: true, value: { projects: [{ ...source, nodeCount: 1 }] } }
+          if (endpoint === 'projects/list') return { ok: true, value: { projects: [{ ...source, nodeCount: 1 }], workspaceId } }
           if (endpoint === 'providers/list') return { ok: true, value: { providers: [] } }
           if (endpoint === 'workflows/list') return { ok: true, value: { workflows: [] } }
           if (endpoint === 'nodes/list') return { ok: true, value: { nodeDefinitions: [] } }
@@ -524,7 +525,10 @@ test('Codex discovery refreshes metadata while an existing node keeps its unavai
   })
   const call = ctx.connection.rpc.call
   ctx.connection.rpc.call = (channel, endpoint, payload) => endpoint === 'providers/list'
-    ? Promise.resolve({ ok: true, value: { providers: [{ id: 'codex-plan', kind: 'codex-plan', configured: true, availableModels: [] }] } })
+    ? Promise.resolve({ ok: true, value: { providers: [{
+      id: 'codex-plan', kind: 'codex-plan', configured: true, availableModels: ['future-model'],
+      codexCatalog: { source: 'cache', fetchedAt: 1000, error: null },
+    }] } })
     : call(channel, endpoint, payload)
   const controller = new Controller(ctx)
   t.after(() => controller.dispose())
@@ -537,6 +541,27 @@ test('Codex discovery refreshes metadata while an existing node keeps its unavai
   await controller.runNode('text')
   assert.equal(requestedModel, 'retired-model', 'Backend must validate the saved model, never silently select the default')
   assert.equal(controller.getSnapshot().project.graph.nodes[0].data.modelId, 'retired-model')
+})
+
+test('a fresh Codex connection automatically discovers signed-in models', async t => {
+  const Controller = await DirectorController()
+  const provider = { id: 'codex-plan', kind: 'codex-plan', configured: true, availableModels: [],
+    codexCatalog: { source: 'unavailable', fetchedAt: null, error: null } }
+  const requests = []
+  const controller = new Controller({
+    sessions: { list: { getSnapshot: () => ({ byId: {} }), subscribe: () => () => {} } },
+    connection: { rpc: { call: async (_channel, endpoint) => {
+      requests.push(endpoint)
+      const value = { 'providers/list': { providers: [provider] }, 'projects/list': { projects: [] },
+        'workflows/list': { workflows: [] }, 'nodes/list': { nodeDefinitions: [] }, 'providers/models': { models: ['signed-in-default'], workflowModels: {}, codexModels: [], codexCatalog: { source: 'live', defaultModel: 'signed-in-default' } } }[endpoint]
+      return { ok: true, value }
+    } } },
+  })
+  t.after(() => controller.dispose())
+  await controller.start()
+  assert.equal(controller.getSnapshot().phase, 'ready')
+  assert.equal(controller.getSnapshot().providers[0].modelDiscovery.state, 'ready')
+  assert.equal(requests.includes('providers/models'), true)
 })
 
 test('project export omits generated Preview artifacts while preserving source assets', async () => {
@@ -1221,6 +1246,8 @@ test('an Image Workflow reference chain resolves a displayed default workflow th
   assert.equal(queuedRequests.length, 1)
   assert.equal(queuedRequests[0].workflowId, 'builtin-qwen-image-edit-consistent')
   assert.equal(queuedRequests[0].bindings[0].assetId, sourceAsset.id)
+  await controller.flushDrafts()
+  controller.dispose()
 })
 
 test('workflow imports and Custom Node installs refresh every configured Comfy model mapping', async () => {

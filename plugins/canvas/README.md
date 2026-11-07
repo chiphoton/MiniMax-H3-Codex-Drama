@@ -2,7 +2,7 @@
 
 A local web canvas for planning and running video-production workflows. The engine is migrated from [chiphoton/DeepSeek-Harness-Video-Director](https://github.com/chiphoton/DeepSeek-Harness-Video-Director) (`dsh-video-director`) into this self-contained `plugins/canvas/` directory. It runs without DeepSeek Harness.
 
-Canvas **0.5.0** syncs the upstream v0.4.1 and v0.5.0 commits from `uncensored`: lighter media previews and polling, paged assets and tasks, provider autosave/model inventories, and a Codex chat that can query and edit workflows with multimodal references. See the [sync record](docs/upstream-sync.md) for the exact source commit and Codex adaptations.
+Canvas **0.6.0** syncs upstream `uncensored` v0.6.0: versioned chat skills, typed text-to-canvas edits, layout planning, Inspect/Undo history, bounded quality iterations, video contact sheets, and rich chat transcripts. The chatbox prioritizes **Codex Plan**, using the signed-in CLI account and its live model catalog. See the [sync record](docs/upstream-sync.md) and [agent workspace guide](docs/agent-workspace.md).
 
 **TEXT WORKFLOW** and **IMAGE WORKFLOW** default to **Codex Plan**, using the locally installed Codex CLI and its existing sign-in through the official Codex SDK. The model list is discovered from the signed-in CLI, including available variants. New selections use its reported default model and each model’s default reasoning effort. Existing projects retain their explicit provider and model selections. Video and audio use ComfyUI by default.
 
@@ -11,6 +11,8 @@ Native Codex images are imported from the current SDK thread's `generated_images
 ## Run from this checkout
 
 Requires Node.js 22.19+ (22.x) or 24+, npm, and a signed-in Codex CLI. Image generation also requires native image generation and the `imagegen` skill in that CLI environment.
+
+Canvas pins `@openai/codex-sdk` **0.167.0**, including its bundled CLI **0.167.0**. It continues to prefer the installed app/CLI executable and its sign-in; `CANVAS_CODEX_PATH` explicitly selects a different executable. See the [Codex runtime verification](docs/codex-runtime.md) for the versions and image capabilities tested.
 
 ```bash
 cd plugins/canvas
@@ -78,6 +80,10 @@ The Codex chat panel has its own resumable SDK conversation per Canvas project. 
 
 Browser drafts are flushed before sending canvas instructions. Concurrent edits compare a separate draft revision; conflicts offer **Export local draft** and **Use Host version**. The chat and accepted workflow runs continue on the server after a browser tab closes. Each active Codex turn has a temporary, authenticated MCP connection scoped to its project and conversation. It shares Codex sign-in, while keeping its own conversation separate from the desktop task.
 
+Type **$canvas-builder**, **$layout-optimizer**, or **$sketch-to-h3** in chat, or use **$ Skills**. The chatbox gear opens **Manage skills**, **Model settings**, **Auto skills**, and **Workflow access**. Custom skills have immutable versions, supporting files, import/export, and per-workflow ownership. **Canvas changes** lets you inspect and undo individual browser or agent edits. Image previews offer **Add to chat**; video previews offer **Add frames to chat**, which creates a six-frame contact sheet without sending a message.
+
+Workflow tools initially expose metadata. Enable content access in the chatbox gear → **Workflow access** before asking the agent to inspect node text/media or execute providers. Explicit attachments are shared when you send a message. **Model settings** opens the local Connections panel; chat models come exclusively from Codex Plan, with each model's default effort and the existing Settings-only Fast control. Quality iterations use explicit job, time, and iteration limits through `vd_quality`; they do not launch new chat turns.
+
 ## Providers and storage
 
 | Setting | Default / purpose |
@@ -93,6 +99,8 @@ Browser drafts are flushed before sending canvas instructions. Concurrent edits 
 | `CANVAS_MINIMAX_H3_LICENSE_ACCEPTED` | Inherited `true`; set `false` to lock H3 generation |
 
 **Settings → Connections → Codex Plan → Refresh** queries the local CLI’s `app-server` `model/list` method, following all pages and excluding hidden entries. Text nodes, image nodes, and Canvas chat share this catalog; image workflows and text nodes with image references exclude models that report text-only input. Models also refresh when Canvas loads and when a generation needs a catalog older than five minutes. The last successful list is stored in `codex-models.json` in the data folder for offline use; refresh failures are shown and never replaced with a built-in list. If a saved model is no longer available, choose another explicitly.
+
+For Codex Plan image nodes, this picker selects the **agent model** that invokes native image generation. The native tool selects its image backend and does not expose an independent image-model picker. OpenAI's [Codex image-generation documentation](https://learn.chatgpt.com/codex/image-generation) currently describes that backend as `gpt-image-2`. The [API image guide](https://developers.openai.com/api/docs/guides/image-generation#gpt-image-26) separately documents GPT Image 2.6 Sunburst and Flare; their API availability does not establish access through the Codex plan. Canvas keeps image generation on the plan route and does not switch to API billing automatically.
 
 **Fast (priority)** appears only in **Settings → Connections → Codex Plan**, defaults **off**, and is remembered with connection settings. It applies to supporting models across text/image nodes and chat, with increased usage; other models keep Standard speed. Canvas explicitly overrides a personal Codex Fast default when this switch is off. Reasoning effort always follows the selected model’s catalog default, without a separate control.
 

@@ -37,6 +37,15 @@ test('Codex SDK chat operates its linked workflow over authenticated MCP and rev
     assert.equal(serviceTier, 'default')
     const stream = options => ({ runStreamed: async content => {
       assert.equal(options.sandboxMode, 'read-only')
+      assert.equal(options.approvalPolicy, 'never')
+      assert.equal(options.networkAccessEnabled, false)
+      assert.deepEqual(Object.keys(config.mcp_servers), ['canvas'])
+      assert.deepEqual(config.mcp_servers.canvas.tools, {
+        vd_canvas: { approval_mode: 'approve' },
+        vd_library: { approval_mode: 'approve' },
+        vd_workspace: { approval_mode: 'approve' },
+        vd_quality: { approval_mode: 'approve' },
+      }, 'noninteractive SDK turns must explicitly approve only the four capability-scoped Canvas tools')
       assert.match(content[0].text, /vd_canvas MCP/)
       const mcp = client(config)
       const initialize = await mcp.rpc('initialize', { protocolVersion: '2025-03-26', capabilities: {}, clientInfo: { name: 'test', version: '1' } })
@@ -115,4 +124,50 @@ test('cancelling a Codex turn revokes its MCP capability and stops in-flight com
   controller.abort()
   assert.equal((await command).result.isError, true)
   assert.equal(bridge.authorized(token), false)
+})
+
+test('Codex exposes all four scoped v0.6 tools with content access, pinned skills, undo and bounded quality runs', async t => {
+  let project, other, app, savedConfig
+  const setup = await fixture(t, ({ config }) => {
+    savedConfig = config
+    return { startThread: () => ({ runStreamed: async () => {
+      const mcp = client(config)
+      const tools = (await mcp.rpc('tools/list')).result.tools
+      assert.deepEqual(tools.map(tool => tool.name), ['vd_canvas', 'vd_library', 'vd_workspace', 'vd_quality'])
+      assert.deepEqual(config.mcp_servers.canvas.enabled_tools, tools.map(tool => tool.name))
+      const invoke = async (name, command, args = {}, extra = {}) => {
+        const response = await mcp.rpc('tools/call', { name, arguments: { command, args, ...extra } })
+        if (response.result.isError) throw new Error(response.result.content[0].text)
+        return JSON.parse(response.result.content[0].text)
+      }
+      for (const tool of tools) await assert.rejects(invoke(tool.name, 'list', {}, { projectId: other.id }), /owning workflow/)
+      const skill = await invoke('vd_library', 'create', { name: 'codex-test', description: 'Synthetic instructions', content: 'Inspect synthetic inputs.' })
+      await invoke('vd_library', 'bind', { id: skill.id, revision: 1 })
+      assert.equal((await invoke('vd_library', 'load', { id: skill.id })).content, 'Inspect synthetic inputs.')
+      assert.equal((await invoke('vd_library', 'invoke', { name: 'canvas-builder' })).name, 'canvas-builder')
+      assert.equal((await invoke('vd_workspace', 'manifest')).protocol, 'vd/1')
+      const edited = await invoke('vd_canvas', 'edit', { expectedDraftRevision: 0, edits: [
+        { op: 'add', id: 'text', kind: 'load-text', data: { text: 'Synthetic story.' } },
+        { op: 'add', id: 'trigger', type: 'core.vram-trigger', data: { vramAction: 'skip', vramActionInitialized: true } },
+        { op: 'connect', source: 'text', target: 'trigger', targetHandle: 'in:flow-in' },
+      ] })
+      await assert.rejects(invoke('vd_canvas', 'node', { id: 'text', fields: ['text'] }, { protocol: 'legacy' }), /sharing is disabled/)
+      await assert.rejects(invoke('vd_quality', 'create', { brief: 'Synthetic' }), /content sharing/)
+      await app.rpc('/video-director', 'workspace/access', { projectId: project.id, allowContent: true })
+      const plan = await invoke('vd_quality', 'create', { brief: 'Validate synthetic graph', maxIterations: 1, maxJobs: 2, criteria: [{ id: 'graph', type: 'graph-valid' }] })
+      assert.equal((await invoke('vd_quality', 'step', { id: plan.id, waitMs: 3000 })).state, 'accepted')
+      const history = await invoke('vd_canvas', 'history')
+      assert.equal(history.items[0].id, edited.operation.id)
+      const undone = await invoke('vd_canvas', 'undo', { operationId: edited.operation.id, expectedDraftRevision: edited.draftRevision })
+      assert.equal(undone.operation.undoOf, edited.operation.id)
+      assert.equal((await invoke('vd_canvas', 'summary')).nodeCount, 0)
+      return { events: (async function* () { yield { type: 'item.completed', item: { id: 'done', type: 'agent_message', text: 'Verified.' } } })() }
+    } }) }
+  })
+  app = setup.app; project = setup.project
+  other = await app.store.createProject({ name: 'Other', sessionId: (await app.sessions.create()).id })
+  await app.sessions.start(setup.session.id, { projectId: project.id, text: 'Use the synthetic workspace tools.' })
+  await Promise.all([...app.sessions.active.values()].map(task => task.promise))
+  assert.equal(app.sessions.view(setup.session.id).error, null)
+  assert.equal((await client(savedConfig).request({})).status, 401)
 })

@@ -57,10 +57,11 @@ async function createRuntime(dataDir, options) {
   const jobs = new JobManager(store, providers, { concurrency: options.jobConcurrency ?? 2 })
   await jobs.recover()
   const directorRpc = createDirectorRpc({ store, workflows, nodes, providers, jobs, providerSettings, registerAsset: async () => {} })
-  const mcp = new CodexCanvasMcp({ store, call: directorRpc, getUrl: options.getCanvasUrl })
+  const mcp = new CodexCanvasMcp({ store, call: (endpoint, payload, signal) => endpoint.startsWith('storage/') ? options.storageRpc(endpoint.slice(8), payload, signal) : directorRpc(endpoint, payload, signal), getUrl: options.getCanvasUrl })
   const sessions = new ChatSessions(store.root, { createCodex: options.createCodex, codexModels, openCanvasTools: scope => mcp.open(scope), getProvider: () => providerSettings.resolved().providers.find(provider => provider.kind === 'codex-plan') })
   await sessions.init()
   await jobs.workflowScheduler.recover()
+  await jobs.qualityLoop.recover()
   const examples = new ExampleProjects(options.examplesDir)
 
   const rpc = async (channel, endpoint, payload = {}, signal) => {
@@ -76,6 +77,7 @@ async function createRuntime(dataDir, options) {
       case 'list': value = { sessions: sessions.list() }; break
       case 'create': value = await sessions.create(payload.sessionId); break
       case 'get': value = sessions.view(payload.sessionId); break
+      case 'image': value = await sessions.image(payload.sessionId, payload.attachmentId); break
       case 'rename': value = await sessions.rename(payload.sessionId, payload.title); break
       case 'model': value = await sessions.selectModel(payload.sessionId, payload.model); break
       case 'start': value = await sessions.start(payload.sessionId, payload); break
@@ -84,10 +86,11 @@ async function createRuntime(dataDir, options) {
     }
     return { ok: true, value }
   }
-  return { store, providers, jobs, sessions, codexModels, rpc, mcp }
+  return { store, providers, jobs, sessions, codexModels, rpc, mcp, workflows, nodes }
 }
 
 async function activeWorkReason(runtime) {
+  if (runtime.jobs.qualityLoop.watched.size) return 'Finish or stop quality plans before changing storage.'
   if (runtime.sessions.active.size > 0) return 'Wait for the current Codex chat response to finish before changing storage.'
   if (runtime.jobs.running > 0 || runtime.jobs.queue.length > 0) return 'Wait for generation jobs to finish or cancel them before changing storage.'
   for (const project of await runtime.store.listProjects()) {
@@ -101,7 +104,7 @@ async function activeWorkReason(runtime) {
 /** A loopback HTTP host for the migrated engine; it does not need Harness. */
 export async function createCanvasServer(options = {}) {
   let baseUrl
-  options = { ...options, getCanvasUrl: () => baseUrl }
+  options = { ...options, getCanvasUrl: () => baseUrl, storageRpc: (endpoint, payload, signal) => rpc('/canvas-storage', endpoint, payload, signal) }
   const location = await loadStorageLocation(options.dataDir ?? dataDirectory())
   let runtime = await createRuntime(location.dataDir, options)
   const defaultDataDir = await realpath(dirname(location.settingsPath))
@@ -134,12 +137,14 @@ export async function createCanvasServer(options = {}) {
         next = await createRuntime(destination, options)
         await saveStorageLocation(location.settingsPath, destination)
       } catch (error) {
+        await next?.jobs.qualityLoop.close()
         await next?.jobs.workflowScheduler.close()
         await next?.sessions.close()
         await next?.codexModels.close()
         throw storageError(`Data was copied to ${destination}, but Canvas could not activate it. The original folder is still in use. ${error.message}`)
       }
       await runtime.codexModels.close()
+      await runtime.jobs.qualityLoop.close()
       await runtime.jobs.workflowScheduler.close()
       runtime = next
       return { ...await storageInfo(), canChange: true, blockedReason: null, previousDataDir, backupDataDir }
@@ -187,7 +192,7 @@ export async function createCanvasServer(options = {}) {
       if ((request.headers.origin && request.headers.origin !== origin)
         || request.headers['sec-fetch-site'] === 'cross-site') return sendJson(response, 403, { error: 'Cross-origin requests are not allowed' })
       const url = new URL(request.url, origin)
-      if (request.method === 'GET' && url.pathname === '/health') return sendJson(response, 200, { ok: true, app: 'canvas', version: '0.5.0', dataDir: runtime.store.root, codexRuntime: codexRuntimeAccess() })
+      if (request.method === 'GET' && url.pathname === '/health') return sendJson(response, 200, { ok: true, app: 'canvas', version: '0.6.0', dataDir: runtime.store.root, codexRuntime: codexRuntimeAccess() })
       if (url.pathname === '/mcp/canvas') {
         if (!runtime.mcp.authorized(request.headers.authorization)) return sendJson(response, 401, { error: 'Canvas tool session expired' })
         if (request.method !== 'POST') {
@@ -245,6 +250,8 @@ export async function createCanvasServer(options = {}) {
     server, rpc,
     get store() { return runtime.store },
     get providers() { return runtime.providers },
+    get nodes() { return runtime.nodes },
+    get workflows() { return runtime.workflows },
     get sessions() { return runtime.sessions },
     async listen(port = serverPort()) {
       await new Promise((resolve, reject) => { server.once('error', reject); server.listen(port, '127.0.0.1', () => { server.off('error', reject); resolve() }) })
@@ -258,6 +265,7 @@ export async function createCanvasServer(options = {}) {
         await movePromise?.catch(() => {})
         await Promise.allSettled([...inFlight])
         const { store, sessions, jobs, codexModels } = runtime
+        await jobs.qualityLoop.close()
         await jobs.workflowScheduler.close()
         await sessions.close()
         await codexModels.close()

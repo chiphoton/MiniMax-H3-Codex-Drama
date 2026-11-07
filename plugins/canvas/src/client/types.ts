@@ -453,6 +453,8 @@ export interface VdNodeDefinitionDescriptor {
 
 export interface DirectorJob {
   id: string
+  /** Quality outputs stay in run history until explicitly attached to the canvas. */
+  qualityPlanId?: string
   /** Correlates one vd-node request with its result, not an entire vd-run. */
   clientRunId?: string
   /** Persisted name for the grouped vd-run ID. */
@@ -493,6 +495,7 @@ export type VdRunMode = 'all' | 'selected' | 'from-selection' | 'dependencies'
 /** One orchestration run of a vd-workflow scope, potentially containing several vd-jobs. */
 export interface VdRun {
   scheduler?: 'host'
+  qualityPlanId?: string
   workflowName?: string
   queuedAt?: string
   executionStartedAt?: string

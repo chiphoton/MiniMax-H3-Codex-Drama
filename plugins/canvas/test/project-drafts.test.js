@@ -15,7 +15,7 @@ const bundle = await build({ stdin: {
   resolveDir: fileURLToPath(new URL('../src/client/', import.meta.url)),
   contents: "export {DirectorController} from './controller'; export {ProjectDraftCache} from './project-drafts'", loader: 'ts',
 }, bundle: true, format: 'esm', platform: 'browser', write: false })
-const { DirectorController, ProjectDraftCache } = await import(`data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].contents).toString('base64')}`)
+const { DirectorController, ProjectDraftCache } = await import(`data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].text + '\n//# sourceURL=project-drafts-tests.js').toString('base64')}`)
 
 async function fixture(t) {
   const root = await mkdtemp(join(tmpdir(), 'director-drafts-'))
@@ -33,7 +33,7 @@ async function fixture(t) {
     create: async (options = {}) => {
       const id = options.sessionId ?? randomUUID()
       sessions.byId[id] = { id }
-      bindings.set(id, { session: { getSnapshot: () => ({}), rename: async () => ({ ok: true, value: {} }) } })
+      bindings.set(id, { session: { getSnapshot: () => ({}), rename: async title => { sessions.byId[id].title = title; return { ok: true, value: { title } } } } })
       return id
     },
     binding: id => bindings.get(id),
@@ -48,7 +48,7 @@ async function fixture(t) {
     await rm(root, { recursive: true, force: true })
   })
   return {
-    root, context, calls,
+    root, context, calls, sessions,
     get controller() { return controller },
     get host() { return host },
     async restart() {
@@ -62,6 +62,154 @@ async function fixture(t) {
     },
   }
 }
+
+test('open canvas polling and restart preserve quality inputs while retaining synthetic outputs in history', async t => {
+  const app = await fixture(t)
+  await app.controller.createProject('Synthetic quality canvas')
+  app.host.providers.run = async () => ({ kind: 'text', providerId: 'openai', text: 'Synthetic output only' })
+  await app.controller.workspace('canvas', 'edit', { expectedDraftRevision: 0, edits: [
+    { op: 'add', id: 'text', kind: 'load-text', data: { text: 'Initial synthetic input' } },
+    { op: 'add', id: 'run', kind: 'prompt-enhancer', data: { providerId: 'openai', prompt: 'Synthetic prompt' } },
+    { op: 'connect', source: 'text', target: 'run' },
+  ] })
+  const plan = await app.controller.workspace('quality', 'create', { brief: 'Synthetic controller iteration', criteria: [{ id: 'text', type: 'text-includes', nodeId: 'text', text: 'Accepted' }] })
+  const first = await app.controller.workspace('quality', 'step', { id: plan.id, waitMs: 3000 })
+  assert.equal(first.state, 'needs-revision')
+  await app.controller.refreshVdRuns()
+  await app.controller.flushDrafts()
+  const projectId = app.controller.getSnapshot().project.id
+  assert.equal((await app.host.store.getProject(projectId)).draftRevision, plan.draftRevision)
+  assert.equal(app.controller.getSnapshot().project.graph.nodes.length, 2)
+  assert.equal(app.controller.getSnapshot().jobs[0].qualityPlanId, plan.id)
+  assert.equal(app.controller.getSnapshot().jobs[0].result.text, 'Synthetic output only')
+  await app.controller.workspace('quality', 'revise', { id: plan.id, edits: [{ op: 'update', id: 'text', data: { text: 'Accepted synthetic input' } }] })
+  const accepted = await app.controller.workspace('quality', 'step', { id: plan.id, waitMs: 3000 })
+  assert.equal(accepted.state, 'accepted')
+  await app.controller.refreshVdRuns(); await app.controller.flushDrafts()
+  await app.restart()
+  await app.controller.flushDrafts()
+  assert.equal((await app.host.store.getProject(projectId)).draftRevision, accepted.draftRevision)
+  const graph = app.controller.getSnapshot().project.graph
+  assert.equal(graph.nodes.length, 2)
+  assert.equal(graph.nodes.find(node => node.id === 'run').data.result, undefined)
+})
+
+test('renaming the active workflow updates its linked session title', async t => {
+  const app = await fixture(t)
+  await app.controller.createProject('Original workflow')
+  const { id, sessionId } = app.controller.getSnapshot().project
+  await app.controller.renameProjectById(id, 'Renamed workflow')
+  await app.controller.flushDrafts()
+  assert.equal(app.sessions.byId[sessionId].title, 'Renamed workflow')
+})
+
+test('renaming a background workflow updates only its linked session', async t => {
+  const app = await fixture(t)
+  await app.controller.createProject('Background workflow')
+  const { id, sessionId } = app.controller.getSnapshot().project
+  await app.controller.createProject('Active workflow')
+  const activeSessionId = app.controller.getSnapshot().project.sessionId
+  await app.controller.renameProjectById(id, 'Renamed background')
+  assert.equal(app.sessions.byId[sessionId].title, 'Renamed background')
+  assert.equal(app.sessions.byId[activeSessionId].title, 'Active workflow')
+  assert.equal(app.sessions.current, activeSessionId)
+})
+
+test('undo, redo, Save and background Discard keep the linked title consistent', async t => {
+  const app = await fixture(t)
+  const c = app.controller
+  await c.createProject('Saved name')
+  await c.saveProject()
+  const { id, sessionId } = c.getSnapshot().project
+  await c.renameProjectById(id, 'Draft name')
+  c.undo()
+  await c.flushDrafts()
+  assert.equal(app.sessions.byId[sessionId].title, 'Saved name')
+  c.redo()
+  await c.flushDrafts()
+  assert.equal(app.sessions.byId[sessionId].title, 'Draft name')
+  await c.createProject('Other workflow')
+  await c.discardChanges(id)
+  assert.equal(app.sessions.byId[sessionId].title, 'Saved name')
+  await c.selectProject(id)
+  c.renameProject('Saved immediately')
+  await c.saveProject()
+  assert.equal(app.sessions.byId[sessionId].title, 'Saved immediately')
+  await c.renameProjectById(id, 'Discard current')
+  await c.discardChanges()
+  assert.equal(app.sessions.byId[sessionId].title, 'Saved immediately')
+})
+
+test('startup repairs old titles from effective draft names without opening their sessions', async t => {
+  const app = await fixture(t)
+  await app.controller.createProject('Saved title')
+  const { id, sessionId } = app.controller.getSnapshot().project
+  await app.controller.renameProjectById(id, 'Recovered draft title')
+  await app.controller.createProject('Current workflow')
+  const currentSession = app.sessions.current
+  app.sessions.byId[sessionId].title = 'Stale title'
+  const before = app.calls.length
+  await app.restart()
+  assert.equal(app.sessions.byId[sessionId].title, 'Recovered draft title')
+  assert.equal(app.sessions.current, currentSession)
+  assert.equal(app.calls.slice(before).filter(call => call === 'projects/get').length, 1,
+    'repair uses project summaries, without loading background workflows')
+})
+
+test('a delayed rename cannot overwrite a newer workflow name', async t => {
+  const app = await fixture(t)
+  const c = app.controller
+  await c.createProject('Original')
+  const { id, sessionId } = c.getSnapshot().project
+  const binding = app.context.sessions.binding(sessionId).session
+  const rename = binding.rename
+  let entered, release
+  const started = new Promise(resolve => { entered = resolve })
+  const gate = new Promise(resolve => { release = resolve })
+  binding.rename = async title => {
+    if (title === 'First') { entered(); await gate }
+    return rename(title)
+  }
+  const first = c.renameProjectById(id, 'First')
+  await started
+  const second = c.renameProjectById(id, 'Second')
+  release()
+  await Promise.all([first, second])
+  assert.equal(app.sessions.byId[sessionId].title, 'Second')
+  assert.equal((await app.host.store.getProject(id)).draft.name, 'Second')
+})
+
+test('rename failure preserves the durable draft and can be retried without a draft conflict', async t => {
+  const app = await fixture(t)
+  const c = app.controller
+  await c.createProject('Original')
+  const { id, sessionId } = c.getSnapshot().project
+  const binding = app.context.sessions.binding(sessionId).session
+  const rename = binding.rename
+  binding.rename = async () => { throw new Error('Synthetic rename outage') }
+  await c.renameProjectById(id, 'Keep this name')
+  assert.equal((await app.host.store.getProject(id)).draft.name, 'Keep this name')
+  assert.match(c.getSnapshot().error, /linked session could not be renamed/)
+  assert.equal(c.getSnapshot().conflict, false)
+  const writes = app.calls.filter(call => call === 'projects/draft').length
+  binding.rename = rename
+  await c.renameProjectById(id, 'Keep this name')
+  assert.equal(app.sessions.byId[sessionId].title, 'Keep this name')
+  assert.equal(app.calls.filter(call => call === 'projects/draft').length, writes)
+  assert.equal(c.getSnapshot().conflict, false)
+  assert.equal(c.getSnapshot().error, null)
+})
+
+test('missing imported conversations are adopted locally with the workflow title', async t => {
+  const app = await fixture(t)
+  await app.controller.createProject('Missing history')
+  const { sessionId } = app.controller.getSnapshot().project
+  delete app.sessions.byId[sessionId]
+  await app.restart()
+  assert.equal(app.sessions.byId[sessionId].title, 'Missing history')
+  assert.equal(Object.keys(app.sessions.byId).length, 1)
+  assert.equal(app.controller.getSnapshot().error, null)
+})
 
 test('drafts preserve multiple workflows, names and canvas positions through switching and Host restart', async t => {
   const app = await fixture(t)
@@ -123,7 +271,11 @@ test('Discard restores the latest explicit Save, preserves records, and clears u
   controller.renameProject('Temporary name')
   await controller.discardChanges()
   assert.ok(controller.getSnapshot().project.draftRevision > saved.draftRevision)
-  assert.deepEqual({ ...controller.getSnapshot().project, draftRevision: saved.draftRevision }, saved)
+  // Discard preserves the durable history pointer, even when the browser's
+  // earlier saved view predates the last coalesced draft receipt.
+  const { operationHead: _head, ...discardedState } = controller.getSnapshot().project
+  const { operationHead: _savedHead, ...savedState } = saved
+  assert.deepEqual({ ...discardedState, draftRevision: saved.draftRevision }, savedState)
   assert.equal(controller.getSnapshot().dirty, false)
   assert.equal(controller.getSnapshot().canUndo, false)
   assert.equal(controller.getSnapshot().canRedo, false)

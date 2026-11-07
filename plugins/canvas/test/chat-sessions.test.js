@@ -42,6 +42,44 @@ test('Canvas chat resumes its saved Codex thread and retains project isolation',
   await sessions.close()
 })
 
+test('resumed SDK turns can reuse item IDs without replacing earlier messages or tool results', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'codex-canvas-turn-ids-'))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  let turn = 0
+  const thread = { runStreamed: async () => {
+    const current = ++turn
+    return { events: (async function* () {
+      yield { type: 'thread.started', thread_id: 'same-sdk-thread' }
+      yield { type: 'item.started', item: { id: 'item_0', type: 'mcp_tool_call', tool: 'vd_canvas', status: 'in_progress', arguments: { command: 'summary' } } }
+      yield { type: 'item.completed', item: { id: 'item_0', type: 'mcp_tool_call', tool: 'vd_canvas', status: 'completed', arguments: { command: 'summary' },
+        result: { content: [{ type: 'text', text: `Result ${current}` }] } } }
+      yield { type: 'item.started', item: { id: 'item_1', type: 'agent_message', text: 'Working' } }
+      yield { type: 'item.completed', item: { id: 'item_1', type: 'agent_message', text: `Answer ${current}` } }
+    })() }
+  } }
+  const createCodex = () => ({ startThread: () => thread, resumeThread: () => thread })
+  let sessions = new ChatSessions(root, { codexModels: modelFixture(), createCodex })
+  await sessions.init()
+  const session = await sessions.create()
+  for (const text of ['Build the workflow', 'Save without rerunning']) {
+    await sessions.start(session.id, { text })
+    await Promise.all([...sessions.active.values()].map(task => task.promise))
+    await sessions.close()
+    sessions = new ChatSessions(root, { codexModels: modelFixture(), createCodex })
+    await sessions.init()
+  }
+  const messages = sessions.view(session.id).messages
+  assert.equal(messages.length, 8)
+  assert.equal(new Set(messages.map(message => message.id)).size, 8)
+  assert.deepEqual(messages.filter(message => message.kind === 'assistant').map(message => message.text), ['Answer 1', 'Answer 2'])
+  const calls = messages.filter(message => message.kind === 'tool-call')
+  const results = messages.filter(message => message.kind === 'tool-result')
+  assert.deepEqual(results.map(message => message.text), ['Result 1', 'Result 2'])
+  assert.deepEqual(results.map(message => message.callId), calls.map(message => message.callId))
+  assert.notEqual(calls[0].callId, calls[1].callId)
+  await sessions.close()
+})
+
 test('Canvas chat supports cancellation and rejects overlapping turns and invalid images', async t => {
   const root = await mkdtemp(join(tmpdir(), 'codex-canvas-cancel-'))
   t.after(() => rm(root, { recursive: true, force: true }))
@@ -67,5 +105,39 @@ test('Canvas chat supports cancellation and rejects overlapping turns and invali
   await pending
   assert.equal(sessions.view(row.id).running, false)
   assert.equal(sessions.view(row.id).error, 'Response cancelled.')
+  await sessions.close()
+})
+
+test('Codex transcripts retain model identity and local images across restart without cross-session reads', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'codex-canvas-transcript-'))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const data = Buffer.from('synthetic image').toString('base64')
+  const createCodex = () => ({ startThread: () => ({ runStreamed: async () => ({ events: (async function* () {
+    yield { type: 'item.completed', item: { id: 'inspect', type: 'mcp_tool_call', tool: 'vd_canvas', status: 'completed', arguments: { command: 'image' },
+      result: { content: [{ type: 'text', text: 'Synthetic image' }, { type: 'image', mimeType: 'image/png', data }] } } }
+    yield { type: 'item.completed', item: { id: 'answer', type: 'agent_message', text: '**Inspected** Image 1.' } }
+  })() }) }) })
+  let sessions = new ChatSessions(root, { codexModels: modelFixture(), createCodex })
+  await sessions.init()
+  const first = await sessions.create(); const other = await sessions.create()
+  await sessions.start(first.id, { text: 'Inspect Image 1', images: [{ mimeType: 'image/png', name: 'synthetic.png', data }] })
+  await Promise.all([...sessions.active.values()].map(task => task.promise))
+  assert.equal(sessions.view(first.id).error, null)
+  const messages = sessions.view(first.id).messages
+  assert.equal(messages[0].text, 'Inspect Image 1')
+  assert.equal(messages[1].toolCommand, 'image')
+  assert.equal(messages[2].kind, 'tool-result')
+  assert.deepEqual(messages[3].model, { provider: 'codex-plan', model: 'gpt-5.6-sol' })
+  for (const message of [messages[0], messages[2]]) {
+    const id = message.images[0].attachmentId
+    assert.equal((await sessions.image(first.id, id)).data, data)
+    await assert.rejects(sessions.image(other.id, id), /not found/)
+  }
+  await assert.rejects(sessions.image(first.id, '../outside.png'), /not found/)
+  await sessions.close()
+  sessions = new ChatSessions(root, { codexModels: modelFixture(), createCodex })
+  await sessions.init()
+  assert.equal((await sessions.image(first.id, messages[0].images[0].attachmentId)).data, data)
+  assert.deepEqual(sessions.view(first.id).messages, messages)
   await sessions.close()
 })
